@@ -1,0 +1,542 @@
+C51 COMPILER V9.05   AT24C02                                                               04/11/2012 16:47:01 PAGE 1   
+
+
+C51 COMPILER V9.05, COMPILATION OF MODULE AT24C02
+OBJECT MODULE PLACED IN .\at24c02.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE ..\src\meeprom\at24c02.c LARGE OMF2 ROM(D16M) BROWSE INTVECTOR(0X8020) INCD
+                    -IR(..\src\main;..\src\mcpu;..\src\mswdma;..\src\uart0;..\src\mmstimer;..\src\mwif;..\src\madapter;..\src\mtcpip;..\src\m
+                    -ping;..\src\mpppoe;..\src\si2c;..\src\mdnsc;..\src\mconsole;..\src\mtelnet;..\src\meeprom;..\src\mmac;..\src\mdhcpc;..\s
+                    -rc\mhttp;..\src\mgs2wifi;..\src\mhsuart;..\src\msmtpc;..\src\web_page;..\src\mdhcps;..\src\mdebug;..\src\counter) DEFINE
+                    -(RuntimeCodeAt32KH) VARBANKING DEBUG PRINT(.\at24c02.lst) OBJECT(.\at24c02.obj)
+
+line level    source
+
+   1          
+   2          
+   3          /* INCLUDE FILE DECLARATIONS */
+   4          #include        "types.h"
+   5          #include        "ax22000.h"
+   6          #include        "interrupt.h"
+   7          #include        "i2c.h"
+   8          #include        "at24c02.h"
+   9          #include        "uart0.h"
+  10          #include    "printd.h"
+  11          
+  12          
+  13          /* STATIC VARIABLE DECLARATIONS */
+  14          static U8_T             i2cApiRxPkt[MST_MAX_PKT_NUM];
+  15          static U8_T             i2cApiTxPkt[MST_MAX_PKT_NUM];
+  16          
+  17          //NDBG
+  18          extern U8_T XDATA       I2C_IntrHang;
+  19          
+  20          /* LOCAL SUBPROGRAM DECLARATIONS */
+  21          U32_T   DbgLostCount = 0;
+  22          
+  23          
+  24          /* LOCAL SUBPROGRAM BODIES */
+  25          
+  26          
+  27          /* EXPORTED SUBPROGRAM BODIES */
+  28          
+  29          /*
+  30           *--------------------------------------------------------------------------------
+  31           * BOOL ByteWrite(U16_T AddrOfDev, U16_T AddrOfMem,
+  32           *                U8_T ByteData, U8_T EndCond)
+  33           * Purpose :
+  34           * Params  :
+  35           * Returns :
+  36           * Note    :
+  37           *--------------------------------------------------------------------------------
+  38           */
+  39          BOOL ByteWrite(U16_T AddrOfDev, U16_T AddrOfMem, U8_T ByteData, U8_T EndCond)
+  40          {
+  41   1              I2C_BUF         *ptTxPkt = NULL;
+  42   1              U8_T            AddrMode = 0;
+  43   1      
+  44   1              ptTxPkt = (I2C_BUF *)i2cApiTxPkt;
+  45   1              ptTxPkt->I2cEnd = EndCond;
+  46   1              ptTxPkt->I2cDir = I2C_MST_XMIT;
+  47   1              ptTxPkt->DataLen = 0x02;
+  48   1      
+  49   1              /* Device Address */
+  50   1              I2C_Cmd(SI_RD, I2CCTL, &AddrMode);
+  51   1              if (AddrMode & I2C_10BIT)
+C51 COMPILER V9.05   AT24C02                                                               04/11/2012 16:47:01 PAGE 2   
+
+  52   1              {
+  53   2                      ptTxPkt->I2cAddr.TenBitAddr = (U16_T)(AddrOfDev | ((AddrOfMem & 0x0700) >> 8));
+  54   2              }
+  55   1              else
+  56   1              {
+  57   2                      ptTxPkt->I2cAddr.SevenBitAddr = (U8_T)(AddrOfDev | ((AddrOfMem & 0x0700) >> 8));
+  58   2              }
+  59   1              /* Word Address */
+  60   1              ptTxPkt->I2cData[0] = (U8_T)(AddrOfMem & 0x00FF);
+  61   1              /* Access Data */
+  62   1              ptTxPkt->I2cData[1] = ByteData;
+  63   1              I2C_FlagEnb(I2C_BUSY);
+  64   1              I2C_PktBuf(ptTxPkt);
+  65   1              while (I2C_FlagChk(I2C_BUSY))
+  66   1              {
+  67   2              }
+  68   1              if (I2C_FlagChk(I2C_NACK))
+  69   1              {
+  70   2                      I2C_FlagClr(I2C_NACK);
+  71   2                      return FALSE;
+  72   2              }
+  73   1              if (I2C_FlagChk(I2C_LOST))
+  74   1              {
+  75   2                      I2C_FlagClr(I2C_LOST);
+  76   2                      DbgLostCount ++;
+  77   2                      return FALSE;
+  78   2              }
+  79   1      
+  80   1              return TRUE;
+  81   1      }
+  82          
+  83          /*
+  84           *--------------------------------------------------------------------------------
+  85           * BOOL PageWrite(U16_T AddrOfDev, U16_T AddrOfMem,
+  86           *                U16_T WriteLen, U8_T EndCond)
+  87           * Purpose :
+  88           * Params  :
+  89           * Returns :
+  90           * Note    :
+  91           *--------------------------------------------------------------------------------
+  92           */
+  93          BOOL PageWrite(U16_T AddrOfDev, U16_T AddrOfMem, U8_T *ptPageData, U16_T WriteLen, U8_T EndCond)
+  94          {
+  95   1              
+  96   1              I2C_BUF XDATA   *ptTxPkt = NULL;
+  97   1              U16_T                   i;
+  98   1              U8_T XDATA              AddrMode = 0;
+  99   1      
+ 100   1              ptTxPkt = (I2C_BUF *)i2cApiTxPkt;
+ 101   1              ptTxPkt->I2cEnd = EndCond;
+ 102   1              ptTxPkt->I2cDir = I2C_MST_XMIT;
+ 103   1              ptTxPkt->DataLen = WriteLen + 1;
+ 104   1              /* Device Address */
+ 105   1              I2C_Cmd(SI_RD, I2CCTL, &AddrMode);
+ 106   1              if (AddrMode & I2C_10BIT)
+ 107   1              {
+ 108   2                      ptTxPkt->I2cAddr.TenBitAddr = (U16_T)(AddrOfDev | ((AddrOfMem & 0x0700) >> 8));
+ 109   2              }
+ 110   1              else
+ 111   1              {
+ 112   2                      ptTxPkt->I2cAddr.SevenBitAddr = (U8_T)(AddrOfDev | ((AddrOfMem & 0x0700) >> 8));
+ 113   2              }
+C51 COMPILER V9.05   AT24C02                                                               04/11/2012 16:47:01 PAGE 3   
+
+ 114   1              /* Word Address */
+ 115   1              ptTxPkt->I2cData[0] = (U8_T)(AddrOfMem & 0x00FF);
+ 116   1              /* Access Data */
+ 117   1              for (i = 0 ; i < WriteLen ; i ++)
+ 118   1              {
+ 119   2                      ptTxPkt->I2cData[i + 1] = *(ptPageData + i);
+ 120   2              }
+ 121   1              I2C_FlagEnb(I2C_BUSY);
+ 122   1              I2C_PktBuf(ptTxPkt);
+ 123   1              while (I2C_FlagChk(I2C_BUSY))
+ 124   1              {
+ 125   2      
+ 126   2              }
+ 127   1      
+ 128   1              if (I2C_FlagChk(I2C_NACK))
+ 129   1              {
+ 130   2                      I2C_FlagClr(I2C_NACK);
+ 131   2                      return FALSE;
+ 132   2              }
+ 133   1              if (I2C_FlagChk(I2C_LOST))
+ 134   1              {
+ 135   2                      I2C_FlagClr(I2C_LOST);
+ 136   2                      DbgLostCount ++;
+ 137   2                      return FALSE;
+ 138   2              }
+ 139   1      
+ 140   1              return TRUE;
+ 141   1      }
+ 142          
+ 143          /*
+ 144           *--------------------------------------------------------------------------------
+ 145           * BOOL CurRead(U16_T AddrOfDev, I2C_BUF *ptRxPkt)
+ 146           * Purpose :
+ 147           * Params  :
+ 148           * Returns :
+ 149           * Note    :
+ 150           *--------------------------------------------------------------------------------
+ 151           */
+ 152          BOOL CurRead(U16_T AddrOfDev, I2C_BUF *ptRxPkt)
+ 153          {
+ 154   1              U8_T XDATA                      AddrMode = 0;
+ 155   1      
+ 156   1              ptRxPkt = (I2C_BUF *)i2cApiRxPkt;
+ 157   1              ptRxPkt->I2cEnd = I2C_STOP_COND;
+ 158   1              ptRxPkt->I2cDir = I2C_MST_RCVR;
+ 159   1              ptRxPkt->DataLen = 0x01;
+ 160   1              /* Device Address */
+ 161   1              I2C_Cmd(SI_RD, I2CCTL, &AddrMode);
+ 162   1              if (AddrMode & I2C_10BIT)
+ 163   1              {
+ 164   2                      ptRxPkt->I2cAddr.TenBitAddr = (U16_T)AddrOfDev;
+ 165   2              }
+ 166   1              else
+ 167   1              {
+ 168   2                      ptRxPkt->I2cAddr.SevenBitAddr = (U8_T)AddrOfDev;
+ 169   2              }
+ 170   1              /* No Word Address */
+ 171   1              /* Access Data */
+ 172   1              I2C_FlagEnb(I2C_BUSY);
+ 173   1              I2C_PktBuf(ptRxPkt);
+ 174   1              while (I2C_FlagChk(I2C_BUSY)) {}
+ 175   1              if (I2C_FlagChk(I2C_NACK))
+C51 COMPILER V9.05   AT24C02                                                               04/11/2012 16:47:01 PAGE 4   
+
+ 176   1              {
+ 177   2                      I2C_FlagClr(I2C_NACK);
+ 178   2                      return FALSE;
+ 179   2              }
+ 180   1              if (I2C_FlagChk(I2C_LOST))
+ 181   1              {
+ 182   2                      I2C_FlagClr(I2C_LOST);
+ 183   2                      DbgLostCount ++;
+ 184   2                      return FALSE;
+ 185   2              }
+ 186   1      
+ 187   1              return TRUE;
+ 188   1      }
+ 189          
+ 190          /*
+ 191           *--------------------------------------------------------------------------------
+ 192           * BOOL DummyWrite(U16_T AddrOfDev, U16_T AddrOfMem, U8_T EndCond)
+ 193           * Purpose :
+ 194           * Params  :
+ 195           * Returns :
+ 196           * Note    :
+ 197           *--------------------------------------------------------------------------------
+ 198           */
+ 199          BOOL DummyWrite(U16_T AddrOfDev, U16_T AddrOfMem, U8_T EndCond)
+ 200          {
+ 201   1              I2C_BUF XDATA   *ptTxPkt = NULL;
+ 202   1              U8_T XDATA              AddrMode = 0;
+ 203   1      
+ 204   1              ptTxPkt = (I2C_BUF *)i2cApiTxPkt;
+ 205   1              ptTxPkt->I2cEnd = EndCond;
+ 206   1              ptTxPkt->I2cDir = I2C_MST_XMIT;
+ 207   1              ptTxPkt->DataLen = 0x01;
+ 208   1              /* Device Address */
+ 209   1              I2C_Cmd(SI_RD, I2CCTL, &AddrMode);
+ 210   1              if (AddrMode & I2C_10BIT)
+ 211   1              {
+ 212   2                      ptTxPkt->I2cAddr.TenBitAddr = (U16_T)(AddrOfDev | ((AddrOfMem & 0x0700) >> 8));
+ 213   2              }
+ 214   1              else
+ 215   1              {
+ 216   2                      ptTxPkt->I2cAddr.SevenBitAddr = (U8_T)(AddrOfDev | ((AddrOfMem & 0x0700) >> 8));
+ 217   2              }
+ 218   1              /* Word Address */
+ 219   1              ptTxPkt->I2cData[0] = (U8_T)(AddrOfMem & 0x00FF);
+ 220   1              /* No Access Data */
+ 221   1              I2C_FlagEnb(I2C_BUSY);
+ 222   1              I2C_FlagClr(I2C_RESTART);
+ 223   1              I2C_PktBuf(ptTxPkt);
+ 224   1      
+ 225   1              while (I2C_FlagChk(I2C_BUSY))
+ 226   1              {
+ 227   2              }
+ 228   1              if (I2C_FlagChk(I2C_NACK))
+ 229   1              {
+ 230   2                      I2C_FlagClr(I2C_NACK);
+ 231   2      
+ 232   2                      return FALSE;
+ 233   2              }
+ 234   1              if (I2C_FlagChk(I2C_LOST))
+ 235   1              {
+ 236   2                      I2C_FlagClr(I2C_LOST);
+ 237   2                      DbgLostCount ++;
+C51 COMPILER V9.05   AT24C02                                                               04/11/2012 16:47:01 PAGE 5   
+
+ 238   2                      return FALSE;
+ 239   2              }
+ 240   1      
+ 241   1              return TRUE;
+ 242   1      }
+ 243          
+ 244          /*
+ 245           *--------------------------------------------------------------------------------
+ 246           * BOOL RdmRead(U16_T AddrOfDev, U16_T AddrOfMem ,I2C_BUF *ptPktTemp, U16_T ReadLen, U8_T EndCond)
+ 247           * Purpose :
+ 248           * Params  :
+ 249           * Returns :
+ 250           * Note    :
+ 251           *--------------------------------------------------------------------------------
+ 252           */
+ 253          BOOL RdmRead(U16_T AddrOfDev, U16_T AddrOfMem ,I2C_BUF *ptPktTemp, U16_T ReadLen, U8_T EndCond)
+ 254          {
+ 255   1              I2C_BUF         *ptRxPkt = NULL;
+ 256   1              U16_T           i;
+ 257   1              U8_T XDATA      AddrMode = 0;
+ 258   1      
+ 259   1              ptRxPkt = (I2C_BUF *)i2cApiRxPkt;
+ 260   1              ptRxPkt->I2cEnd = I2C_STOP_COND;
+ 261   1              ptRxPkt->I2cDir = I2C_MST_RCVR;
+ 262   1              ptRxPkt->DataLen = ReadLen;
+ 263   1              /* Device Address */
+ 264   1              I2C_Cmd(SI_RD, I2CCTL, &AddrMode);
+ 265   1              if (AddrMode & I2C_10BIT)
+ 266   1              {
+ 267   2                      ptRxPkt->I2cAddr.TenBitAddr = (U16_T)(AddrOfDev | ((AddrOfMem & 0x0700) >> 8));
+ 268   2              }
+ 269   1              else
+ 270   1              {
+ 271   2                      ptRxPkt->I2cAddr.SevenBitAddr = (U8_T)(AddrOfDev | ((AddrOfMem & 0x0700) >> 8));
+ 272   2              }
+ 273   1              if (EndCond & I2C_STOP_COND)
+ 274   1              {
+ 275   2                      if (DummyWrite(AddrOfDev, AddrOfMem, I2C_STOP_COND))
+ 276   2                      {
+ 277   3                              I2C_FlagEnb(I2C_BUSY);
+ 278   3                              I2C_PktBuf(ptRxPkt);
+ 279   3                              while (I2C_FlagChk(I2C_BUSY))
+ 280   3                              {
+ 281   4                              }
+ 282   3                              if (I2C_FlagChk(I2C_NACK))
+ 283   3                              {
+ 284   4                                      I2C_FlagClr(I2C_NACK);
+ 285   4                                      return FALSE;
+ 286   4                              }
+ 287   3                              if (I2C_FlagChk(I2C_LOST))
+ 288   3                              {
+ 289   4                                      I2C_FlagClr(I2C_LOST);
+ 290   4                                      DbgLostCount ++;
+ 291   4                                      return FALSE;
+ 292   4                              }
+ 293   3                              for (i=0 ; i<=ReadLen ; i++)
+ 294   3                              {
+ 295   4                                      ptPktTemp->I2cData[i] = ptRxPkt->I2cData[i];
+ 296   4                              }
+ 297   3                              return TRUE;
+ 298   3                      }
+ 299   2                      else
+C51 COMPILER V9.05   AT24C02                                                               04/11/2012 16:47:01 PAGE 6   
+
+ 300   2                      {
+ 301   3                              return FALSE;
+ 302   3                      }
+ 303   2              }
+ 304   1              else
+ 305   1              {
+ 306   2                      if (DummyWrite(AddrOfDev, AddrOfMem, EndCond))
+ 307   2                      {
+ 308   3                              while (!I2C_FlagChk(I2C_RESTART))
+ 309   3                              {
+ 310   4                                      if (!I2C_FlagChk(I2C_BUSY))
+ 311   4                                      {
+ 312   5                                              if (I2C_FlagChk(I2C_NACK))
+ 313   5                                              {
+ 314   6                                                      I2C_FlagClr(I2C_NACK);
+ 315   6                                                      return FALSE;
+ 316   6                                              }
+ 317   5                                              if (I2C_FlagChk(I2C_LOST))
+ 318   5                                              {
+ 319   6                                                      I2C_FlagClr(I2C_LOST);
+ 320   6                                                      DbgLostCount ++;
+ 321   6                                                      return FALSE;
+ 322   6                                              }
+ 323   5                                      }
+ 324   4                              }
+ 325   3      
+ 326   3                              I2C_FlagClr(I2C_RESTART);
+ 327   3                              while (I2C_FlagChk(I2C_BUSY))
+ 328   3                              {
+ 329   4                              }
+ 330   3                              if (I2C_FlagChk(I2C_NACK))
+ 331   3                              {
+ 332   4                                      I2C_FlagClr(I2C_NACK);
+ 333   4                                      return FALSE;
+ 334   4                              }
+ 335   3                              if (I2C_FlagChk(I2C_LOST))
+ 336   3                              {
+ 337   4                                      I2C_FlagClr(I2C_LOST);
+ 338   4                                      DbgLostCount ++;
+ 339   4                                      return FALSE;
+ 340   4                              }
+ 341   3      
+ 342   3                              I2C_FlagEnb(I2C_BUSY);
+ 343   3                              I2C_PktBuf(ptRxPkt);
+ 344   3                              while (I2C_FlagChk(I2C_BUSY))
+ 345   3                              {
+ 346   4                              }
+ 347   3      
+ 348   3                              if (I2C_FlagChk(I2C_NACK))
+ 349   3                              {
+ 350   4                                      I2C_FlagClr(I2C_NACK);
+ 351   4                                      return FALSE;
+ 352   4                              }
+ 353   3                              if (I2C_FlagChk(I2C_LOST))
+ 354   3                              {
+ 355   4                                      I2C_FlagClr(I2C_LOST);
+ 356   4                                      DbgLostCount ++;
+ 357   4                                      return FALSE;
+ 358   4                              }
+ 359   3                              for (i=0 ; i<=ReadLen ; i++)
+ 360   3                              {
+ 361   4                                      ptPktTemp->I2cData[i] = ptRxPkt->I2cData[i];
+C51 COMPILER V9.05   AT24C02                                                               04/11/2012 16:47:01 PAGE 7   
+
+ 362   4                              }
+ 363   3                              return TRUE;
+ 364   3                      }
+ 365   2                      else
+ 366   2                      {
+ 367   3                              return FALSE;
+ 368   3                      }
+ 369   2              }
+ 370   1      }
+ 371          
+ 372          /*
+ 373           *--------------------------------------------------------------------------------
+ 374           * U8_T EEPROM_Init()
+ 375           * Purpose :
+ 376           * Params  :
+ 377           * Returns :
+ 378           * Note    :
+ 379           *--------------------------------------------------------------------------------
+ 380           */
+ 381          void EEPROM_Init(void)
+ 382          {
+ 383   1              U16_T   sys_clk;
+ 384   1      
+ 385   1              /* Enable I2C interrupt */
+ 386   1              EXTINT4(1);
+ 387   1      
+ 388   1      #if 0
+                      /* get system clock */
+                      switch (AX11000_GetSysClk())
+                      {
+                              case SCS_100M :
+                                      sys_clk = 8000;
+                                      break;
+                              case SCS_50M :
+                                      sys_clk = 4000;
+                                      break;
+                              case SCS_25M :
+                                      sys_clk = 2000;
+                                      break;
+                      }
+              #else
+ 403   1              sys_clk = 100;
+ 404   1      #endif
+ 405   1      
+ 406   1              sys_clk--;
+ 407   1              switch (CSREPR & BIT7)
+ 408   1              {
+ 409   2                      case SCS_80M :
+ 410   2                              /* I2C master mode, interrupt enable, fast mode in slave, 7-bits address, 400KHz at 80M */
+ 411   2                              I2C_Setup(I2C_ENB|I2C_FAST|I2C_MST_IE|I2C_7BIT|I2C_MASTER_MODE, 0x0030, 0x005A);
+ 412   2                              printd("80M\r\n");
+ 413   2                              break;
+ 414   2                      case SCS_40M :
+ 415   2                              /* I2C master mode, interrupt enable, fast mode in slave, 7-bits address, 400KHz at 40M */
+ 416   2                              I2C_Setup(I2C_ENB|I2C_FAST|I2C_MST_IE|I2C_7BIT|I2C_MASTER_MODE, 0x0018, 0x005A);
+ 417   2                              printd("40M\r\n");
+ 418   2                              break;
+ 419   2                      default :
+ 420   2                              /* I2C master mode, interrupt enable, fast mode in slave, 7-bits address, 400KHz at 40M */
+ 421   2                              I2C_Setup(I2C_ENB|I2C_FAST|I2C_MST_IE|I2C_7BIT|I2C_MASTER_MODE, 0x0030, 0x005A);
+ 422   2                              break;
+ 423   2              }
+C51 COMPILER V9.05   AT24C02                                                               04/11/2012 16:47:01 PAGE 8   
+
+ 424   1      
+ 425   1      } /* End of EEPROM_Init */
+ 426          
+ 427          /*
+ 428           *--------------------------------------------------------------------------------
+ 429           * U8_T EEPROM_Read(U16_T addr, U8_T len, U8_T* pBuf)
+ 430           * Purpose :
+ 431           * Params  :
+ 432           * Returns :
+ 433           * Note    :
+ 434           *--------------------------------------------------------------------------------
+ 435           */
+ 436          U8_T EEPROM_Read(U16_T addr, U8_T len, U8_T* pBuf)
+ 437          {
+ 438   1              U16_T   i;
+ 439   1              I2C_BUF dumpdata;
+ 440   1      
+ 441   1              dumpdata.I2cEnd = 0;
+ 442   1              dumpdata.I2cDir = 0;
+ 443   1              dumpdata.DataLen = 0;
+ 444   1              dumpdata.I2cAddr.SevenBitAddr = 0;
+ 445   1              dumpdata.I2cAddr.TenBitAddr = 0;
+ 446   1              for (i=0; i<MST_MAX_PKT_NUM; i++)
+ 447   1              {
+ 448   2                      dumpdata.I2cData[i] = 0;
+ 449   2              }
+ 450   1              
+ 451   1              if (RdmRead((U16_T)(0x0050), (U16_T)addr, &dumpdata, (U16_T)len, I2C_NO_STOP))
+ 452   1              {
+ 453   2                      for (i = 0 ; i < len ; i ++)
+ 454   2                      {
+ 455   3                              pBuf[i] = dumpdata.I2cData[i+1];
+ 456   3                      }
+ 457   2              }
+ 458   1              else
+ 459   1              {
+ 460   2                      return 0;
+ 461   2              }
+ 462   1              return 1;
+ 463   1      
+ 464   1      }
+ 465          
+ 466          /*
+ 467           *--------------------------------------------------------------------------------
+ 468           * U8_T EEPROM_Write(U16_T addr, U8_T len, U8_T* pBuf)
+ 469           * Purpose :
+ 470           * Params  :
+ 471           * Returns :
+ 472           * Note    :
+ 473           *--------------------------------------------------------------------------------
+ 474           */
+ 475          U8_T EEPROM_Write(U16_T addr, U8_T* pBuf)
+ 476          {
+ 477   1              return ByteWrite((U16_T)(0x0050), (U16_T)addr, *pBuf, I2C_STOP_COND);
+ 478   1      
+ 479   1      }
+ 480          
+ 481          /*
+ 482           *--------------------------------------------------------------------------------
+ 483           * U8_T EEPROM_BatchWrite(U16_T addr, U8_T len, U8_T* pBuf)
+ 484           * Purpose :
+ 485           * Params  :
+C51 COMPILER V9.05   AT24C02                                                               04/11/2012 16:47:01 PAGE 9   
+
+ 486           * Returns :
+ 487           * Note    :
+ 488           *--------------------------------------------------------------------------------
+ 489           */
+ 490          U8_T EEPROM_BatchWrite(U16_T addr, U16_T len, U8_T* pBuf)
+ 491          {
+ 492   1              return PageWrite((U16_T)(0x0050), (U16_T)addr, pBuf, len, I2C_STOP_COND);
+ 493   1      }
+ 494          
+ 495          /* End of at24c01a.c */
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2572    ----
+   CONSTANT SIZE    =     12    ----
+   XDATA SIZE       =    604     372
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

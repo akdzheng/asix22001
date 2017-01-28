@@ -1,0 +1,18 @@
+//======================================================================
+// AX220xx Firmware Revision History
+// Module Name: MCPU DHCP Server Module (mdhcps)
+//
+// This document describes the major changes, additions and bug fixes made 
+// to the AX220xx Firmware between released versions. 
+//======================================================================
+Version 1.2.0 (2011-05-27)
+1. Add the function to process DHCP RELEASE message.
+2. Fixed the bug of wrong expiration time being assigned.
+
+Version 1.1.0  (2011-05-02)
+1. Fixed a software issue that lease time of DHCP protocol could not exceed
+   0xffff seconds.
+
+Version 1.0.0  (2011-02-24)
+1. Initial release
+

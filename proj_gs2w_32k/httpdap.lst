@@ -1,0 +1,2368 @@
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 1   
+
+
+C51 COMPILER V9.05, COMPILATION OF MODULE HTTPDAP
+OBJECT MODULE PLACED IN .\httpdap.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE ..\src\web_page\httpdap.c LARGE OMF2 ROM(D16M) BROWSE INTVECTOR(0X8020) INC
+                    -DIR(..\src\main;..\src\mcpu;..\src\mswdma;..\src\uart0;..\src\mmstimer;..\src\mwif;..\src\madapter;..\src\mtcpip;..\src\
+                    -mping;..\src\mpppoe;..\src\si2c;..\src\mdnsc;..\src\mconsole;..\src\mtelnet;..\src\meeprom;..\src\mmac;..\src\mdhcpc;..\
+                    -src\mhttp;..\src\mgs2wifi;..\src\mhsuart;..\src\msmtpc;..\src\web_page;..\src\mdhcps;..\src\mdebug;..\src\counter) DEFIN
+                    -E(RuntimeCodeAt32KH) VARBANKING DEBUG PRINT(.\httpdap.lst) OBJECT(.\httpdap.obj)
+
+line level    source
+
+   1          /*
+   2           ******************************************************************************
+   3           *     Copyright (c) 2010       ASIX Electronic Corporation      All rights reserved.
+   4           *
+   5           *     This is unpublished proprietary source code of ASIX Electronic Corporation
+   6           *
+   7           *     The copyright notice above does not evidence any actual or intended
+   8           *     publication of such source code.
+   9           ******************************************************************************
+  10           */
+  11           /*============================================================================
+  12           * Module Name: httpdap.c
+  13           * Purpose:
+  14           * Author:
+  15           * Date:
+  16           * Notes:
+  17           * $Log: httpdap.c,v $
+  18           * no message
+  19           *
+  20           *=============================================================================
+  21           */
+  22          #define HTTPDAP_DEBUG   1
+  23          #define HTTPDAP_ENABLE_AUTHORITY 0
+  24          /* INCLUDE FILE DECLARATIONS */
+  25          #include "httpdap.h"
+  26          #include "httpdapi.h"
+  27          #include "filesys.h"
+  28          #include "ax22000.h"
+  29          
+  30          #include "mcpu.h"
+  31          #include "printd.h"
+  32          #include <string.h>
+  33          #include "delay.h"
+  34          #include "main.h"
+  35          #include "gs2w.h"
+  36          #include "gconfig.h"
+  37          #if (INCLUDE_EVENT_DETECT)
+              #include "gevent.h"
+              #endif
+  40          
+  41          #include "gudpdat.h"
+  42          #include "gtcpdat.h"
+  43          #include "stoe.h"
+  44          
+  45          #include "mwioctl.h"
+  46          #include "mwifapp.h"
+  47          #include "hsuart2.h"
+  48          #include "mstimer.h"
+  49          /* NAMING CONSTANT DECLARATIONS */
+  50          #define HTTPDAP_REBOOT_CMD              0x01
+  51          #define HTTPDAP_RESTORE_CMD             0x02
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 2   
+
+  52          #define HTTPDAP_BLDR_FWUPGRADE_CMD      0x03
+  53          #define HTTPDAP_FWUPGRADE_CMD   0x04
+  54          #define HTTPDAP_WCPU_FWUPGRADE_CMD      0x05
+  55          
+  56          /* GLOBAL VARIABLES DECLARATIONS */
+  57          
+  58          /* LOCAL VARIABLES DECLARATIONS */
+  59          static U8_T *pHttpap_buf;
+  60          static U8_T httpap_tmp8;
+  61          static U16_T httpap_tmp16;
+  62          static U32_T httpap_tmp32;
+  63          
+  64          static U16_T httpap_AuthenTimerEvent = 0;
+  65          
+  66          HTTPDAP_INFO httpdap;
+  67          /* NAMING CONSTANT DECLARATIONS */
+  68          
+  69          /* GLOBAL VARIABLES DECLARATIONS */
+  70          
+  71          /* LOCAL VARIABLES DECLARATIONS */
+  72          
+  73          /* LOCAL SUBPROGRAM DECLARATIONS */
+  74          /* Add function declaration to support customers' application, start */
+  75          U8_T httpap_GetElementValue(U8_T eid, U8_T **pVal);
+  76          U8_T httpap_SetElementValue(U8_T eid, U8_T *pVal, U8_T ValLen);
+  77          U8_T httpap_CheckElementUpdate(U8_T eid);
+  78          U8_T httpap_CheckElementUpdateByName(U8_T *pEname);
+  79          
+  80          U8_T httpap_SecurityProcess(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo);
+  81          
+  82          U8_T httpap_GetIndexPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo);
+  83          U8_T httpap_PostIndexPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo);
+  84          U8_T httpap_GetBasicPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo);
+  85          U8_T httpap_PostBasicPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo);
+  86          U8_T httpap_GetAdvancePage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo);
+  87          U8_T httpap_PostAdvancePage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo);
+  88          U8_T httpap_GetSecurityPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo);
+  89          U8_T httpap_PostSecurityPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo);
+  90          U8_T httpap_GetWiFiPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo);
+  91          U8_T httpap_PostWiFiPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo);
+  92          U8_T httpap_GetWiFiWizardPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo);
+  93          U8_T httpap_PostWiFiWizardPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo);
+  94          U8_T httpap_PostHctentPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo);
+  95          /* Add function declaration to support customers' application, end */
+  96          
+  97          /*
+  98           * ----------------------------------------------------------------------------
+  99           * Function Name: HTTPAP_Init()
+ 100           * Purpose:
+ 101           * Params:
+ 102           * Returns:
+ 103           * Note:
+ 104           * ----------------------------------------------------------------------------
+ 105           */
+ 106          void HTTPAP_Init(HTTP_SERVER_INFO *pInfo)
+ 107          {
+ 108   1              pInfo->HomePage = FILE_INDEX;
+ 109   1      
+ 110   1              /* Add to support customers' application, start */
+ 111   1              memset((U8_T *)&httpdap, 0, sizeof(HTTPDAP_INFO));
+ 112   1              httpdap.AccIPOnOff = (GCONFIG_GetNetwork() & GCONFIG_NETWORK_ACC_IP_ENABLE) ? 1:0;
+ 113   1              
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 3   
+
+ 114   1      #if HTTPDAP_ENABLE_AUTHORITY    
+                      pInfo->HomePage = FILE_BASIC;
+              #endif
+ 117   1              /* Add to support customers' application, end */
+ 118   1      
+ 119   1      } /* End of HTTPAP_Init() */
+ 120          
+ 121          /*
+ 122           * ----------------------------------------------------------------------------
+ 123           * Function Name: HTTPAP_ResponseComplete()
+ 124           * Purpose:
+ 125           * Params:
+ 126           * Returns:
+ 127           * Note:
+ 128           * ----------------------------------------------------------------------------
+ 129           */
+ 130          U8_T HTTPAP_ResponseComplete(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+ 131          {
+ 132   1              /* Add to support customers' application, start */
+ 133   1              if (pConn->FileId == FILE_SYSMSG)
+ 134   1              {
+ 135   2                      switch (httpdap.Cmd)
+ 136   2                      {
+ 137   3                      case HTTPDAP_REBOOT_CMD:
+ 138   3      #if HTTPDAP_DEBUG                       
+ 139   3                              printd("HTTPDAP: Device Reboot!!\n\r");
+ 140   3      #endif                  
+ 141   3                              DELAY_Ms(500);
+ 142   3                              MCPU_SoftReboot();
+ 143   3                      break;
+ 144   3                      
+ 145   3                      case HTTPDAP_RESTORE_CMD:
+ 146   3      #if HTTPDAP_DEBUG                       
+ 147   3                              printd("HTTPDAP: Restore and Reboot!!\n\r");
+ 148   3      #endif
+ 149   3                              GCONFIG_ReadDefaultConfigData();
+ 150   3                              GCONFIG_WriteConfigData();
+ 151   3                              DELAY_Ms(500);
+ 152   3                              MCPU_SoftReboot();
+ 153   3                      break;  
+ 154   3                      
+ 155   3                      case HTTPDAP_BLDR_FWUPGRADE_CMD:
+ 156   3      #if HTTPDAP_DEBUG                       
+ 157   3                              printd("HTTPDAP: Upgrade Bootloader\n\r");
+ 158   3      #endif                  
+ 159   3                              GCONFIG_EnableFirmwareUpgrade(GCONFIG_FTYPE_BLDR);
+ 160   3                              GCONFIG_WriteConfigData();
+ 161   3                              MCPU_SoftReboot();
+ 162   3                      break;
+ 163   3                      
+ 164   3                      case HTTPDAP_FWUPGRADE_CMD:
+ 165   3      #if HTTPDAP_DEBUG                       
+ 166   3                              printd("HTTPDAP: Upgrade MCPU\n\r");
+ 167   3      #endif                  
+ 168   3                              GCONFIG_EnableFirmwareUpgrade(GCONFIG_FTYPE_MCPU);
+ 169   3                              GCONFIG_WriteConfigData();              
+ 170   3                              MCPU_SoftReboot();
+ 171   3                      break;
+ 172   3                      
+ 173   3                      case HTTPDAP_WCPU_FWUPGRADE_CMD:
+ 174   3      #if HTTPDAP_DEBUG                       
+ 175   3                              printd("HTTPDAP: Upgrade WCPU\n\r");
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 4   
+
+ 176   3      #endif                  
+ 177   3                              GCONFIG_EnableFirmwareUpgrade(GCONFIG_FTYPE_WCPU);
+ 178   3                              GCONFIG_WriteConfigData();              
+ 179   3                              MCPU_SoftReboot();
+ 180   3                      break;                          
+ 181   3                      default:
+ 182   3                      break;
+ 183   3                      }
+ 184   2                      httpdap.Cmd = 0;        
+ 185   2              }
+ 186   1              
+ 187   1              /* Add to support customers' application, end */
+ 188   1              return HTTP_POST_OK;
+ 189   1      } /* End of HTTPAP_ResponseComplete() */
+*** WARNING C280 IN LINE 130 OF ..\src\web_page\httpdap.c: 'pInfo': unreferenced local variable
+ 190          
+ 191          /*
+ 192           * ----------------------------------------------------------------------------
+ 193           * Function Name: HTTPAP_DivideHtmlFile()
+ 194           * Purpose:
+ 195           * Params:
+ 196           * Returns:
+ 197           * Note:
+ 198           * ----------------------------------------------------------------------------
+ 199           */
+ 200          void HTTPAP_DivideHtmlFile(HTTP_SERVER_CONN *pConn, U8_T fileId)
+ 201          {
+ 202   1              /* Add to support customers' application, start */
+ 203   1      
+ 204   1              /* Add to support customers' application, end */
+ 205   1      
+ 206   1      } /* End of HTTPAP_DivideHtmlFile() */
+*** WARNING C280 IN LINE 200 OF ..\src\web_page\httpdap.c: 'pConn': unreferenced local variable
+*** WARNING C280 IN LINE 200 OF ..\src\web_page\httpdap.c: 'fileId': unreferenced local variable
+ 207          
+ 208          /*
+ 209           * ----------------------------------------------------------------------------
+ 210           * Function Name: HTTPAP_SendMoreWebFragment()
+ 211           * Purpose:
+ 212           * Params:
+ 213           * Returns:
+ 214           * Note:
+ 215           * ----------------------------------------------------------------------------
+ 216           */
+ 217          void HTTPAP_SendMoreWebFragment(U8_T index, HTTP_SERVER_CONN *pConn)
+ 218          {
+ 219   1              /* Add to support customers' application, start */
+ 220   1      
+ 221   1              /* Add to support customers' application, end */
+ 222   1      
+ 223   1      } /* End of HTTPAP_SendMoreWebFragment() */
+*** WARNING C280 IN LINE 217 OF ..\src\web_page\httpdap.c: 'index': unreferenced local variable
+*** WARNING C280 IN LINE 217 OF ..\src\web_page\httpdap.c: 'pConn': unreferenced local variable
+ 224          
+ 225          /*
+ 226           * ----------------------------------------------------------------------------
+ 227           * Function Name: HTTPAP_GetMethodProcess()
+ 228           * Purpose:
+ 229           * Params:
+ 230           * Returns:
+ 231           * Note:
+ 232           * ----------------------------------------------------------------------------
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 5   
+
+ 233           */
+ 234          U8_T HTTPAP_GetMethodProcess(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+ 235          {
+ 236   1              /* Add to support customers' application, start */
+ 237   1              if (httpap_SecurityProcess(pConn, pInfo) == HTTP_POST_ERR)
+ 238   1                      return HTTP_POST_ERR;
+ 239   1                              
+ 240   1              switch (pConn->FileId)
+ 241   1              {
+ 242   2              case FILE_INDEX:
+ 243   2                      return (httpap_GetIndexPage(pConn, pInfo));
+ 244   2                      break;
+ 245   2              case FILE_BASIC:
+ 246   2                      return (httpap_GetBasicPage(pConn, pInfo));
+ 247   2                      break;          
+ 248   2              case FILE_ADVANCED:
+ 249   2                      return (httpap_GetAdvancePage(pConn, pInfo));   
+ 250   2                      break;          
+ 251   2              case FILE_SECURITY:
+ 252   2                      return (httpap_GetSecurityPage(pConn, pInfo));
+ 253   2                      break;          
+ 254   2              case FILE_WIFI:                 
+ 255   2                      return (httpap_GetWiFiPage(pConn, pInfo));      
+ 256   2                      break;
+ 257   2              case FILE_WIFIWZ_ADV:
+ 258   2              case FILE_WIFIWZ_STAT:
+ 259   2              case FILE_WIFIWZ_SYS:
+ 260   2              case FILE_WIFIWZ_WEP:
+ 261   2              case FILE_WIFIWZ_WPA:
+ 262   2                      return (httpap_GetWiFiWizardPage(pConn, pInfo));                
+ 263   2                      break;          
+ 264   2      //      case FILE_STATUS:               
+ 265   2      //              return (httpap_GetStatusPage(pConn, pInfo));    
+ 266   2      //              break;                  
+ 267   2      
+ 268   2              default:
+ 269   2                      break;  
+ 270   2              }
+ 271   1              /* Add to support customers' application, end */
+ 272   1              return HTTP_POST_OK;
+ 273   1      } /* End of HTTPAP_GetMethodProcess() */
+ 274          
+ 275          /*
+ 276           * ----------------------------------------------------------------------------
+ 277           * Function Name: HTTPAP_PostMethodPreParseProcess()
+ 278           * Purpose:
+ 279           * Params:
+ 280           * Returns:
+ 281           * Note:
+ 282           * ----------------------------------------------------------------------------
+ 283           */
+ 284          U8_T HTTPAP_PostMethodPreParseProcess(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+ 285          {
+ 286   1              /* Add to support customers' application, start */
+ 287   1      
+ 288   1              /* Add to support customers' application, end */
+ 289   1              return HTTP_POST_OK;
+ 290   1      } /* HTTPAP_PostMethodPreParseProcess() */
+*** WARNING C280 IN LINE 284 OF ..\src\web_page\httpdap.c: 'pConn': unreferenced local variable
+*** WARNING C280 IN LINE 284 OF ..\src\web_page\httpdap.c: 'pInfo': unreferenced local variable
+ 291          
+ 292          /*
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 6   
+
+ 293           * ----------------------------------------------------------------------------
+ 294           * Function Name: HTTPAP_PostMethodDeferParseProcess()
+ 295           * Purpose:
+ 296           * Params:
+ 297           * Returns:
+ 298           * Note:
+ 299           * ----------------------------------------------------------------------------
+ 300           */
+ 301          U8_T HTTPAP_PostMethodDeferParseProcess(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+ 302          {
+ 303   1              /* Add to support customers' application, start */
+ 304   1      
+ 305   1              /* Add to support customers' application, end */
+ 306   1              return HTTP_POST_OK;
+ 307   1      } /* HTTPAP_PostMethodDeferParseProcess() */
+*** WARNING C280 IN LINE 301 OF ..\src\web_page\httpdap.c: 'pConn': unreferenced local variable
+*** WARNING C280 IN LINE 301 OF ..\src\web_page\httpdap.c: 'pInfo': unreferenced local variable
+ 308          
+ 309          /*
+ 310           * ----------------------------------------------------------------------------
+ 311           * Function Name: HTTPAP_PostMethodPreUpdateProcess()
+ 312           * Purpose:
+ 313           * Params:
+ 314           * Returns:
+ 315           * Note:
+ 316           * ----------------------------------------------------------------------------
+ 317           */
+ 318          U8_T HTTPAP_PostMethodPreUpdateProcess(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+ 319          {
+ 320   1              /* Add to support customers' application, start */
+ 321   1      
+ 322   1              /* Add to support customers' application, end */
+ 323   1              return HTTP_POST_OK;
+ 324   1      } /* End of HTTPAP_PostMethodPreUpdateProcess() */
+*** WARNING C280 IN LINE 318 OF ..\src\web_page\httpdap.c: 'pConn': unreferenced local variable
+*** WARNING C280 IN LINE 318 OF ..\src\web_page\httpdap.c: 'pInfo': unreferenced local variable
+ 325          
+ 326          /*
+ 327           * ----------------------------------------------------------------------------
+ 328           * Function Name: HTTPAP_PostMethodDeferProcess()
+ 329           * Purpose:
+ 330           * Params:
+ 331           * Returns:
+ 332           * Note:
+ 333           * ----------------------------------------------------------------------------
+ 334           */
+ 335          U8_T HTTPAP_PostMethodDeferProcess(U8_T postSuccessFlag, HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+ 336          {
+ 337   1              /* Add to support customers' application, start */
+ 338   1              if (postSuccessFlag == HTTP_POST_FAILURE)
+ 339   1                      return HTTP_POST_ERR;
+ 340   1              
+ 341   1              if (httpap_SecurityProcess(pConn, pInfo) == HTTP_POST_ERR)
+ 342   1                      return HTTP_POST_ERR;
+ 343   1                              
+ 344   1              switch (pConn->FileId)
+ 345   1              {
+ 346   2              case FILE_INDEX:
+ 347   2                      return (httpap_PostIndexPage(pConn, pInfo));
+ 348   2                      break;
+ 349   2              case FILE_BASIC:
+ 350   2                      return (httpap_PostBasicPage(pConn, pInfo));
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 7   
+
+ 351   2                      break;          
+ 352   2              case FILE_ADVANCED:
+ 353   2                      return (httpap_PostAdvancePage(pConn, pInfo));  
+ 354   2                      break;          
+ 355   2              case FILE_SECURITY:
+ 356   2                      return (httpap_PostSecurityPage(pConn, pInfo));
+ 357   2                      break;          
+ 358   2              case FILE_WIFI:
+ 359   2                      return (httpap_PostWiFiPage(pConn, pInfo));     
+ 360   2                      break;
+ 361   2              case FILE_WIFIWZ_ADV:
+ 362   2              case FILE_WIFIWZ_ECRYTY:
+ 363   2              case FILE_WIFIWZ_SYS:
+ 364   2              case FILE_WIFIWZ_WEP:
+ 365   2              case FILE_WIFIWZ_WPA:   
+ 366   2              case FILE_WIFIWZ_STAT:  
+ 367   2              case FILE_WIFI_WZ:
+ 368   2                      return (httpap_PostWiFiWizardPage(pConn, pInfo));               
+ 369   2                      break;
+ 370   2              case FILE_HCTENT:                               
+ 371   2                      return (httpap_PostHctentPage(pConn, pInfo));   
+ 372   2                      break;                                  
+ 373   2              default:
+ 374   2                      break;  
+ 375   2              }
+ 376   1              /* Add to support customers' application, end */
+ 377   1              return HTTP_POST_ERR;
+ 378   1      
+ 379   1      } /* End of HTTPAP_PostMethodDeferProcess() */
+ 380          
+ 381          /*===========================================================================*/
+ 382          /*============== Functions Supplied by Customers' Application ===============*/
+ 383          /*===========================================================================*/
+ 384          /* Add to support customers' application, start */
+ 385          
+ 386          /*
+ 387           * ----------------------------------------------------------------------------
+ 388           * Function Name: HTTPAP_Task
+ 389           * Purpose:
+ 390           * Params:
+ 391           * Returns:
+ 392           * Note:
+ 393           * ----------------------------------------------------------------------------
+ 394           */
+ 395          void HTTPAP_Task(void)
+ 396          {
+ 397   1              U8_T i;
+ 398   1      
+ 399   1              if (httpap_AuthenTimerEvent != (U16_T)SWTIMER_Tick())
+ 400   1              {
+ 401   2                      httpap_AuthenTimerEvent = (U16_T)SWTIMER_Tick();        
+ 402   2                      for (i = 0; i < MAX_HTTP_CONNECT; i++)
+ 403   2                      {
+ 404   3                              if (httpdap.SecurityTimeExpired[i])
+ 405   3                                      httpdap.SecurityTimeExpired[i] --;
+ 406   3                      }
+ 407   2              }
+ 408   1      } /* End of HTTPAP_Task() */
+ 409          
+ 410          /*
+ 411           * ----------------------------------------------------------------------------
+ 412           * Function Name: httpap_GetElementValue()
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 8   
+
+ 413           * Purpose: 
+ 414           * Params:
+ 415           * Returns:
+ 416           * Note:
+ 417           * ----------------------------------------------------------------------------
+ 418           */
+ 419          U8_T httpap_GetElementValue(U8_T eid, U8_T **pVal)
+ 420          {
+ 421   1              if (eid >= MAX_POST_RECORDS)
+ 422   1                      return 0;
+ 423   1      
+ 424   1              if (POST_Record[eid].PostType == POST_TYPE_TEXT || 
+ 425   1                      POST_Record[eid].PostType == POST_TYPE_TAG || 
+ 426   1                      POST_Record[eid].PostType == POST_TYPE_PASSWORD)
+ 427   1              {
+ 428   2                      BUF_TEXT XDATA *pText = POST_Record[eid].PValue;        
+ 429   2                      *pVal = pText->CurrValue;
+ 430   2                      return (pText->CurrLength - 1);
+ 431   2              }
+ 432   1              else if (POST_Record[eid].PostType == POST_TYPE_SELECT)
+ 433   1              {
+ 434   2                      BUF_SELECT XDATA *pSelect = POST_Record[eid].PValue;
+ 435   2                      *pVal = &(pSelect->CurrentSet);
+ 436   2                      return 1;
+ 437   2              }
+ 438   1      #if (MAX_POST_BUF_RADIO)
+ 439   1              else if (POST_Record[eid].PostType == POST_TYPE_RADIO)
+ 440   1              {
+ 441   2                      BUF_RADIO XDATA *pRadio = POST_Record[eid].PValue;
+ 442   2                      *pVal = &(pRadio->CurrentSet);
+ 443   2                      return 1;
+ 444   2              }
+ 445   1      #endif          
+ 446   1              else if (POST_Record[eid].PostType == POST_TYPE_SUBMIT)
+ 447   1              {
+ 448   2                      BUF_SUBMIT XDATA *pSubmit = POST_Record[eid].PValue;    
+ 449   2                      *pVal = pSubmit->Value;
+ 450   2                      return (pSubmit->DefaultVlaueLen);
+ 451   2              }                       
+ 452   1              return 0; /* element type not support */
+ 453   1                      
+ 454   1      } /* End of httpap_GetElementValue() */
+ 455          
+ 456          /*
+ 457           * ----------------------------------------------------------------------------
+ 458           * Function Name: httpap_SetElementValue()
+ 459           * Purpose: 
+ 460           * Params:
+ 461           * Returns:
+ 462           * Note:
+ 463           * ----------------------------------------------------------------------------
+ 464           */
+ 465          U8_T httpap_SetElementValue(U8_T eid, U8_T *pVal, U8_T ValLen)
+ 466          {
+ 467   1              if (eid >= MAX_POST_RECORDS)
+ 468   1                      return HTTPAPI_ERR;
+ 469   1              
+ 470   1              if (POST_Record[eid].PostType == POST_TYPE_TEXT || 
+ 471   1                      POST_Record[eid].PostType == POST_TYPE_TAG || 
+ 472   1                      POST_Record[eid].PostType == POST_TYPE_PASSWORD)
+ 473   1              {
+ 474   2                      BUF_TEXT XDATA *pText = POST_Record[eid].PValue;        
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 9   
+
+ 475   2                      memcpy(pText->CurrValue, pVal, ValLen);         
+ 476   2                      pText->CurrValue[ValLen] = '"';
+ 477   2                      pText->CurrLength = ValLen + 1;         
+ 478   2                      return POST_Record[eid].PostType;
+ 479   2              }
+ 480   1              else if (POST_Record[eid].PostType == POST_TYPE_SELECT)
+ 481   1              {
+ 482   2                      BUF_SELECT XDATA *pSelect = POST_Record[eid].PValue;            
+ 483   2                      if (*pVal < pSelect->Count)
+ 484   2                              pSelect->CurrentSet = *pVal;            
+ 485   2                      else
+ 486   2                              pSelect->CurrentSet = pSelect->Count-1;
+ 487   2      
+ 488   2                      return POST_Record[eid].PostType;
+ 489   2              }
+ 490   1      #if (MAX_POST_BUF_RADIO)
+ 491   1              else if (POST_Record[eid].PostType == POST_TYPE_RADIO)
+ 492   1              {
+ 493   2                      BUF_RADIO XDATA *pRadio = POST_Record[eid].PValue;
+ 494   2                      if (*pVal < pRadio->Count)
+ 495   2                              pRadio->CurrentSet = *pVal;             
+ 496   2                      else
+ 497   2                              pRadio->CurrentSet = pRadio->Count-1;
+ 498   2                      return POST_Record[eid].PostType;
+ 499   2              }
+ 500   1      #endif
+ 501   1              return HTTPAPI_ERR; /* element type not support */
+ 502   1      } /* End of httpap_SetElementValue() */
+ 503          
+ 504          /*
+ 505           * ----------------------------------------------------------------------------
+ 506           * Function Name: U8_T httpap_CheckElementUpdate()
+ 507           * Purpose: 
+ 508           * Params:
+ 509           * Returns:
+ 510           * Note:
+ 511           * ----------------------------------------------------------------------------
+ 512           */
+ 513          U8_T httpap_CheckElementUpdate(U8_T eid)
+ 514          {
+ 515   1              U8_T i;
+ 516   1              
+ 517   1              if (HTTP_PostCount == 0)
+ 518   1                      return HTTPAPI_ERR;
+ 519   1                      
+ 520   1              for (i = 0; i < HTTP_PostCount; i++)
+ 521   1              {
+ 522   2                      if (HTTP_PostTable[i] == eid)
+ 523   2                              return i;
+ 524   2              }
+ 525   1              return HTTPAPI_ERR;
+ 526   1      } /* End of httpap_CheckElementUpdate() */
+ 527          
+ 528          /*
+ 529           * ----------------------------------------------------------------------------
+ 530           * Function Name: U8_T httpap_CheckElementUpdateByName()
+ 531           * Purpose: 
+ 532           * Params:
+ 533           * Returns:
+ 534           * Note:
+ 535           * ----------------------------------------------------------------------------
+ 536           */
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 10  
+
+ 537          U8_T httpap_CheckElementUpdateByName(U8_T *pEname)
+ 538          {
+ 539   1              U8_T i;
+ 540   1              
+ 541   1              if (HTTP_PostCount == 0)
+ 542   1                      return HTTPAPI_ERR;
+ 543   1                      
+ 544   1              for (i = 0; i < HTTP_PostCount; i++)
+ 545   1              {
+ 546   2                      if ((strlen(pEname) == POST_Record[HTTP_PostTable[i]].NameLen) && 
+ 547   2                              memcmp(pEname, POST_Record[HTTP_PostTable[i]].Name, POST_Record[HTTP_PostTable[i]].NameLen) == 0)
+ 548   2                              return i;
+ 549   2              }
+ 550   1              return HTTPAPI_ERR;
+ 551   1      } /* End of httpap_CheckElementUpdateByName() */
+ 552          
+ 553          /*
+ 554           * ----------------------------------------------------------------------------
+ 555           * Function Name: httpap_SecurityProcess()
+ 556           * Purpose:
+ 557           * Params:
+ 558           * Returns:
+ 559           * Note:
+ 560           * ----------------------------------------------------------------------------
+ 561           */
+ 562          U8_T httpap_SecurityProcess(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+ 563          {
+ 564   1              /* Add to support customers' application, start */
+ 565   1              U8_T i;
+ 566   1      #if HTTPDAP_ENABLE_AUTHORITY    
+                      U8_T *pUsername, *pPassword, *pbuf1, *pbuf2;
+              #endif
+ 569   1      
+ 570   1                      
+ 571   1      #if HTTPDAP_ENABLE_AUTHORITY
+                      //===================== RFC 2617 support ======================= //
+                      if (HTTPAPI_ParseAuthenHeader(HTTP_TmpBuf, pInfo->pRequestBuf, &pUsername, &pPassword) == HTTPAPI_ERR)
+                      {
+              #if HTTPDAP_DEBUG               
+                              printd("HTTPDAP: Authenication header not found\r\n");          
+              #endif
+              HTTPDAP_AUTHORITY_REQUST:       
+              #if (INCLUDE_EVENT_DETECT)
+                              GEVENT_SetAuthFailEvent(1);// Add for authentication fail detect //
+              #endif
+                              HTTPAPI_ResponseAuthenMessage(HTTP_TmpBuf, "Please enter username and password", pConn);
+                              return HTTP_POST_ERR;
+                      }
+                      else
+              #if HTTPDAP_DEBUG
+                              printd("HTTPDAP: header is found, user name is %s, password is %s\r\n", pUsername, pPassword);          
+              #endif  
+                      // get uername and password for reference //
+                      pbuf1 = HTTP_TmpBuf+100;
+                      pbuf2 = HTTP_TmpBuf+150;        
+                      GCONFIG_GetAdmin(pbuf1, pbuf2, &i);
+                      
+                      // check username //
+                      if (strlen(pUsername) != strlen(pbuf1) || strcmp(pUsername,pbuf1))
+                      {
+                              goto HTTPDAP_AUTHORITY_REQUST;
+                      }
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 11  
+
+                      // check password //
+                      if (strlen(pPassword) != strlen(pbuf2) || strcmp(pPassword,pbuf2))
+                      {
+                              goto HTTPDAP_AUTHORITY_REQUST;
+                      }
+                      
+                      httpap_tmp16 = 0xffff;
+                      for (i = 0; i < MAX_HTTP_CONNECT; i++)
+                      {
+                              // found the empty security slot //
+                              if (httpdap.SecurityTimeExpired[i] == 0)
+                              {
+                                      httpdap.SecurityTimeExpired[i] = 0xffff;
+                                      httpdap.SecurityRemoteIP[i] = pConn->Ip;                        
+                                      break;
+                              }
+                              
+                              // found a slot is not most commonly used //
+                              if (httpap_tmp16 > httpdap.SecurityTimeExpired[i])
+                              {
+                                      httpap_tmp16 = httpdap.SecurityTimeExpired[i];
+                                      httpap_tmp8 = i;
+                              }
+                      }
+                      if (i == MAX_HTTP_CONNECT)
+                      {
+                              httpdap.SecurityTimeExpired[httpap_tmp8] = 0xffff;
+                              httpdap.SecurityRemoteIP[httpap_tmp8] = pConn->Ip;
+                      }
+              #else 
+ 629   1              //==================== Web page authentication support =======================//
+ 630   1              if (pConn->FileId != pInfo->HomePage)
+ 631   1              {
+ 632   2                      for (i = 0; i < MAX_HTTP_CONNECT; i++)
+ 633   2                      {
+ 634   3                              if (httpdap.SecurityRemoteIP[i] == pConn->Ip)
+ 635   3                                      break;
+ 636   3                      }
+ 637   2                      
+ 638   2                      if (i == MAX_HTTP_CONNECT || httpdap.SecurityTimeExpired[i] == 0)
+ 639   2                      {
+ 640   3                              HTTPAPI_ResponseErrMessage(HTTP_TmpBuf, HTTPAPI_406_NotAccepTable, pConn);      
+ 641   3                              return HTTP_POST_ERR;   
+ 642   3                      }
+ 643   2                      
+ 644   2                      httpdap.SecurityTimeExpired[i] = 0xffff;// fill a new security time-expired //
+ 645   2              }
+ 646   1      #endif
+ 647   1              /* Add to support customers' application, end */
+ 648   1              return HTTP_POST_OK;
+ 649   1      } /* httpap_SecurityProcess() */
+ 650          
+ 651          /*
+ 652           * ----------------------------------------------------------------------------
+ 653           * Function Name: httpap_GetIndexPage()
+ 654           * Purpose:
+ 655           * Params:
+ 656           * Returns:
+ 657           * Note:
+ 658           * ----------------------------------------------------------------------------
+ 659           */
+ 660          U8_T httpap_GetIndexPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 12  
+
+ 661          {
+ 662   1      #if HTTPDAP_ENABLE_AUTHORITY
+                      pHttpap_buf = HTTP_TmpBuf;
+                      httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"Logout");
+                      HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);                                                                                
+                      return HTTP_POST_ERR;/* EXTERNAL DROP */
+              #else
+ 669   1              U8_T i;
+ 670   1              
+ 671   1              for (i=0; i < MAX_HTTP_CONNECT; i++)
+ 672   1              {
+ 673   2                      if (httpdap.SecurityRemoteIP[i] == pConn->Ip)
+ 674   2                      {
+ 675   3                              httpdap.SecurityTimeExpired[i] = 0;             
+ 676   3                              break;
+ 677   3                      }
+ 678   2              }
+ 679   1      
+ 680   1              httpap_SetElementValue(RECORD_TEXT_username, 0, 0);
+ 681   1              httpap_SetElementValue(RECORD_PASSWORD_password, 0, 0);
+ 682   1      #endif  
+ 683   1              return HTTP_POST_OK;
+ 684   1      } /* End of httpap_GetIndexPage() */
+*** WARNING C280 IN LINE 660 OF ..\src\web_page\httpdap.c: 'pInfo': unreferenced local variable
+ 685          
+ 686          /*
+ 687           * ----------------------------------------------------------------------------
+ 688           * Function Name: httpap_PostIndexPage()
+ 689           * Purpose:
+ 690           * Params:
+ 691           * Returns:
+ 692           * Note:
+ 693           * ----------------------------------------------------------------------------
+ 694           */
+ 695          U8_T httpap_PostIndexPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+ 696          {
+ 697   1              U8_T i, j;
+ 698   1              U8_T *pTmp, XDATA *pbuf1, XDATA *pbuf2;
+ 699   1      
+ 700   1              if (httpap_CheckElementUpdate(RECORD_TEXT_username) != HTTPAPI_ERR &&
+ 701   1                      httpap_CheckElementUpdate(RECORD_PASSWORD_password) != HTTPAPI_ERR)
+ 702   1              {
+ 703   2                      // get uername and password for reference //
+ 704   2                      pbuf1 = HTTP_TmpBuf;
+ 705   2                      pbuf2 = HTTP_TmpBuf + 100;              
+ 706   2                      GCONFIG_GetAdmin(pbuf1, pbuf2, &i);
+ 707   2                              
+ 708   2                      // check username //
+ 709   2                      i = httpap_GetElementValue(RECORD_TEXT_username, &pTmp);
+ 710   2                      j = strlen(pbuf1);
+ 711   2                      if (i != j || memcmp(pbuf1, pTmp, j))
+ 712   2                      {
+ 713   3                              goto HTTPAP_INDEX_POST_ERR;
+ 714   3                      }
+ 715   2                              
+ 716   2                      // check password //
+ 717   2                      i =     httpap_GetElementValue(RECORD_PASSWORD_password, &pTmp);
+ 718   2                      j = strlen(pbuf2);
+ 719   2                      if (i != j || memcmp(pbuf2, pTmp, j))
+ 720   2                      {
+ 721   3                              goto HTTPAP_INDEX_POST_ERR;
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 13  
+
+ 722   3                      }
+ 723   2                      httpap_tmp16 = 0xffff;
+ 724   2                      for (i = 0; i < MAX_HTTP_CONNECT; i++)
+ 725   2                      {
+ 726   3                              // found the empty security slot //
+ 727   3                              if (httpdap.SecurityTimeExpired[i] == 0)
+ 728   3                              {
+ 729   4                                      httpdap.SecurityTimeExpired[i] = 0xffff;
+ 730   4                                      httpdap.SecurityRemoteIP[i] = pConn->Ip;                        
+ 731   4                                      break;
+ 732   4                              }
+ 733   3                      
+ 734   3                              // found a slot is not most commonly used //
+ 735   3                              if (httpap_tmp16 > httpdap.SecurityTimeExpired[i])
+ 736   3                              {
+ 737   4                                      httpap_tmp16 = httpdap.SecurityTimeExpired[i];
+ 738   4                                      httpap_tmp8 = i;
+ 739   4                              }
+ 740   3                      }
+ 741   2                      if (i == MAX_HTTP_CONNECT)
+ 742   2                      {
+ 743   3                              httpdap.SecurityTimeExpired[httpap_tmp8] = 0xffff;
+ 744   3                              httpdap.SecurityRemoteIP[httpap_tmp8] = pConn->Ip;                      
+ 745   3                      }
+ 746   2                      goto HTTPAP_INDEX_POST_OK;
+ 747   2              }
+ 748   1      
+ 749   1      HTTPAP_INDEX_POST_ERR:
+ 750   1      #if (INCLUDE_EVENT_DETECT)
+                      GEVENT_SetAuthFailEvent(1);// Add for authentication fail detect //
+              #endif  
+ 753   1              pHttpap_buf = HTTP_TmpBuf;
+ 754   1              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+ 755   1              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&%s
+             -&%s&%s"
+ 756   1                                                                                              // warning message, delay time, delay time unit, delay time visible, redirect URL //
+ 757   1                                                                                               ,"Username or Password error",2,"sec","off",FSYS_Manage[pConn->FileId].FName);
+ 758   1              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);                                                                                
+ 759   1              return HTTP_POST_ERR;
+ 760   1                      
+ 761   1      HTTPAP_INDEX_POST_OK:   
+ 762   1              HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_BASIC, pConn);// re-direction to basic page //
+ 763   1              return HTTP_POST_ERR;
+ 764   1                              
+ 765   1      } /* End of httpap_PostIndexPage() */
+*** WARNING C280 IN LINE 695 OF ..\src\web_page\httpdap.c: 'pInfo': unreferenced local variable
+ 766          
+ 767          /*
+ 768           * ----------------------------------------------------------------------------
+ 769           * Function Name: httpap_GetBasicPage()
+ 770           * Purpose:
+ 771           * Params:
+ 772           * Returns:
+ 773           * Note:
+ 774           * ----------------------------------------------------------------------------
+ 775           */
+ 776          U8_T httpap_GetBasicPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+ 777          {
+ 778   1              /* Load device name */
+ 779   1              pHttpap_buf = (U8_T *)(GCONFIG_GetDeviceName());
+ 780   1              httpap_tmp8 = strlen(pHttpap_buf);
+ 781   1              if (httpap_tmp8 > 16)
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 14  
+
+ 782   1                      httpap_tmp8 = 16;
+ 783   1              httpap_SetElementValue(RECORD_TEXT_dsm_name, pHttpap_buf, httpap_tmp8); 
+ 784   1              
+ 785   1              /* Load serial setting */
+ 786   1              httpap_tmp16 = GCONFIG_GetSerialPort();
+ 787   1      
+ 788   1              httpap_tmp8 = ((httpap_tmp16 & 0xF800) >> 11);
+ 789   1              httpap_SetElementValue(RECORD_SELECT_dbr, &httpap_tmp8, 1);
+ 790   1      
+ 791   1              httpap_tmp8 = ((httpap_tmp16 & 0x0700) >> 8);
+ 792   1              httpap_SetElementValue(RECORD_SELECT_data, &httpap_tmp8, 1);
+ 793   1      
+ 794   1              httpap_tmp8 = ((httpap_tmp16 & 0x00E0) >> 5);
+ 795   1              httpap_SetElementValue(RECORD_SELECT_parity, &httpap_tmp8, 1);
+ 796   1      
+ 797   1              httpap_tmp8 = ((httpap_tmp16 & 0x0003));
+ 798   1              httpap_SetElementValue(RECORD_SELECT_stop, &httpap_tmp8, 1);
+ 799   1      
+ 800   1              httpap_tmp8 = ((httpap_tmp16 & 0x0001C) >> 2);
+ 801   1              httpap_SetElementValue(RECORD_SELECT_flow, &httpap_tmp8, 1);
+ 802   1      
+ 803   1              /* Load DHCP/Connection type/Connection mode/Accessiable control */
+ 804   1              httpap_tmp16 = GCONFIG_GetNetwork();
+ 805   1              
+ 806   1              httpap_tmp8 = (httpap_tmp16 & GCONFIG_NETWORK_DHCP_ENABLE) ? 1 : 0;
+ 807   1              httpap_SetElementValue(RECORD_SELECT_dhcp, &httpap_tmp8, 1);
+ 808   1              
+ 809   1              httpap_tmp8 = (httpap_tmp16 & GCONFIG_NETWORK_PROTO_TCP) ? 0 : 1;
+ 810   1              httpap_SetElementValue(RECORD_SELECT_conntype, &httpap_tmp8, 1);
+ 811   1                      
+ 812   1              httpap_tmp8 = (httpap_tmp16 & GCONFIG_NETWORK_CLIENT) ? 1 : 0;
+ 813   1              httpap_SetElementValue(RECORD_SELECT_cs_mode, &httpap_tmp8, 1);
+ 814   1      
+ 815   1              /* Load IP address */
+ 816   1              httpap_tmp8 = HTTPAPI_Ulong2IpAddr(GCONFIG_GetServerStaticIP(), HTTP_TmpBuf);
+ 817   1              httpap_SetElementValue(RECORD_TEXT_static_ip, HTTP_TmpBuf, httpap_tmp8);
+ 818   1                      
+ 819   1              /* Load subnet mask */
+ 820   1              httpap_tmp8 = HTTPAPI_Ulong2IpAddr(GCONFIG_GetNetmask(), HTTP_TmpBuf);
+ 821   1              httpap_SetElementValue(RECORD_TEXT_mask, HTTP_TmpBuf, httpap_tmp8);
+ 822   1                      
+ 823   1              /* Load gateway */
+ 824   1              httpap_tmp8 = HTTPAPI_Ulong2IpAddr(GCONFIG_GetGateway(), HTTP_TmpBuf);
+ 825   1              httpap_SetElementValue(RECORD_TEXT_gateway_ip, HTTP_TmpBuf, httpap_tmp8);
+ 826   1      
+ 827   1              /* Load DNS */
+ 828   1              httpap_tmp8 = HTTPAPI_Ulong2IpAddr(GCONFIG_GetDNS(), HTTP_TmpBuf);
+ 829   1              httpap_SetElementValue(RECORD_TEXT_dns_ip, HTTP_TmpBuf, httpap_tmp8);
+ 830   1      
+ 831   1              /* Load server listen port */
+ 832   1              httpap_tmp8 = HTTPAPI_Short2Str(GCONFIG_GetServerDataPktListenPort(), HTTP_TmpBuf);
+ 833   1              httpap_SetElementValue(RECORD_TEXT_s_lstport, HTTP_TmpBuf, httpap_tmp8);
+ 834   1      
+ 835   1              /* Load transmit timer */
+ 836   1              httpap_tmp8 = HTTPAPI_Short2Str(GCONFIG_GetEthernetTxTimer(), HTTP_TmpBuf);
+ 837   1              httpap_SetElementValue(RECORD_TEXT_txtimer, HTTP_TmpBuf, httpap_tmp8);
+ 838   1      
+ 839   1              /* Load destination port */
+ 840   1              httpap_tmp8 = HTTPAPI_Short2Str(GCONFIG_GetClientDestPort(), HTTP_TmpBuf);
+ 841   1              httpap_SetElementValue(RECORD_TEXT_c_desport, HTTP_TmpBuf, httpap_tmp8);
+ 842   1      
+ 843   1              /* Load Destination host name */
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 15  
+
+ 844   1              httpap_tmp8 = GCONFIG_GetDestHostName(HTTP_TmpBuf);
+ 845   1              httpap_SetElementValue(RECORD_TEXT_c_deshn, HTTP_TmpBuf, httpap_tmp8);
+ 846   1              
+ 847   1              /* Load rs485 control bits */
+ 848   1              httpap_tmp8 = GCONFIG_GetRs485Mode();
+ 849   1              httpap_SetElementValue(RECORD_SELECT_rs485, &httpap_tmp8, 1);
+ 850   1                      
+ 851   1              return HTTP_POST_OK;
+ 852   1      } /* End of httpap_GetBasicPage() */
+*** WARNING C280 IN LINE 776 OF ..\src\web_page\httpdap.c: 'pConn': unreferenced local variable
+*** WARNING C280 IN LINE 776 OF ..\src\web_page\httpdap.c: 'pInfo': unreferenced local variable
+ 853          
+ 854          /*
+ 855           * ----------------------------------------------------------------------------
+ 856           * Function Name: httpap_PostBasicPage()
+ 857           * Purpose:
+ 858           * Params:
+ 859           * Returns:
+ 860           * Note:
+ 861           * ----------------------------------------------------------------------------
+ 862           */
+ 863          U8_T httpap_PostBasicPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+ 864          {
+ 865   1              
+ 866   1              /* Device reboot process */
+ 867   1              if (httpap_CheckElementUpdateByName("reboot") != HTTPAPI_ERR)
+ 868   1              {
+ 869   2                      goto HTTPAP_POST_BASIC_OK_REBOOT;               
+ 870   2              }
+ 871   1              /* Device restore process */    
+ 872   1              else if (httpap_CheckElementUpdateByName("restore") != HTTPAPI_ERR)
+ 873   1              {
+ 874   2                      goto HTTPAP_POST_BASIC_OK_RESTORE;              
+ 875   2              }
+ 876   1              else if (httpap_CheckElementUpdate(RECORD_TEXT_dsm_name) != HTTPAPI_ERR && 
+ 877   1                      httpap_CheckElementUpdate(RECORD_TEXT_c_desport) != HTTPAPI_ERR)
+ 878   1              {
+ 879   2                      // Save device name //
+ 880   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_dsm_name, &pHttpap_buf);
+ 881   2                      memcpy(HTTP_TmpBuf,pHttpap_buf,httpap_tmp8);
+ 882   2                      memset(HTTP_TmpBuf+httpap_tmp8, 0 , 16-httpap_tmp8);// To fill the unused data with terminal char('\0').
+             -                
+ 883   2                      GCONFIG_SetDeviceName((GCONFIG_DEV_NAME*)HTTP_TmpBuf);
+ 884   2                              
+ 885   2                      // Save serial setting //
+ 886   2                      httpap_tmp16 = GCONFIG_GetSerialPort();
+ 887   2                      httpap_GetElementValue(RECORD_SELECT_dbr, &pHttpap_buf);
+ 888   2                      httpap_tmp16 = (httpap_tmp16 & (~0xF800)) | (*pHttpap_buf << 11);
+ 889   2              
+ 890   2                      httpap_GetElementValue(RECORD_SELECT_data, &pHttpap_buf);
+ 891   2                      httpap_tmp16 = (httpap_tmp16 & (~0x0700)) | (*pHttpap_buf << 8);
+ 892   2      
+ 893   2                      httpap_GetElementValue(RECORD_SELECT_parity, &pHttpap_buf);
+ 894   2                      httpap_tmp16 = (httpap_tmp16 & (~0x00E0)) | (*pHttpap_buf << 5);
+ 895   2              
+ 896   2                      httpap_GetElementValue(RECORD_SELECT_stop, &pHttpap_buf);
+ 897   2                      httpap_tmp16 = (httpap_tmp16 & (~0x0003)) | *pHttpap_buf;
+ 898   2      
+ 899   2                      httpap_GetElementValue(RECORD_SELECT_flow, &pHttpap_buf);
+ 900   2                      httpap_tmp16 = (httpap_tmp16 & (~0x001C)) | (*pHttpap_buf << 2);
+ 901   2                      GCONFIG_SetSerialPort(httpap_tmp16);
+ 902   2              
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 16  
+
+ 903   2                      // Save DHCP/Connection type/Connection mode //
+ 904   2                      httpap_tmp16 = GCONFIG_GetNetwork();
+ 905   2                      httpap_GetElementValue(RECORD_SELECT_dhcp, &pHttpap_buf);
+ 906   2                      httpap_tmp16 = (httpap_tmp16 & 0xBFFF) | (*pHttpap_buf << 14);
+ 907   2              
+ 908   2                      httpap_GetElementValue(RECORD_SELECT_conntype, &pHttpap_buf);
+ 909   2                      httpap_tmp16 = httpap_tmp16 & 0xF3FF;
+ 910   2                      if (*pHttpap_buf)       
+ 911   2                              httpap_tmp16 |= 0x0800;//UDP mode
+ 912   2                      else            
+ 913   2                              httpap_tmp16 |= 0x0400;//TCP mode
+ 914   2                              
+ 915   2                      httpap_GetElementValue(RECORD_SELECT_cs_mode, &pHttpap_buf);
+ 916   2                      httpap_tmp16 = (httpap_tmp16 & 0x7FFF) | (*pHttpap_buf << 15);
+ 917   2                      GCONFIG_SetNetwork(httpap_tmp16);
+ 918   2      
+ 919   2                      // Save IP address //
+ 920   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_static_ip, &pHttpap_buf);
+ 921   2                      GCONFIG_SetServerStaticIP(HTTPAPI_IpAddr2Ulong(pHttpap_buf, httpap_tmp8));
+ 922   2      
+ 923   2                      // Save subnet mask //
+ 924   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_mask, &pHttpap_buf);
+ 925   2                      GCONFIG_SetNetmask(HTTPAPI_IpAddr2Ulong(pHttpap_buf, httpap_tmp8));
+ 926   2                      
+ 927   2                      // Save gateway //
+ 928   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_gateway_ip, &pHttpap_buf);
+ 929   2                      GCONFIG_SetGateway(HTTPAPI_IpAddr2Ulong(pHttpap_buf, httpap_tmp8));
+ 930   2      
+ 931   2                      // Save DNS //
+ 932   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_dns_ip, &pHttpap_buf);
+ 933   2                      GCONFIG_SetDNS(HTTPAPI_IpAddr2Ulong(pHttpap_buf, httpap_tmp8));
+ 934   2      
+ 935   2                      // Save server listen port //
+ 936   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_s_lstport, &pHttpap_buf);
+ 937   2                      GCONFIG_SetServerDataPktListenPort(HTTPAPI_Str2Short(pHttpap_buf, httpap_tmp8));
+ 938   2      
+ 939   2                      // Save transmit timer //
+ 940   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_txtimer, &pHttpap_buf);
+ 941   2                      GCONFIG_SetEthernetTxTimer(HTTPAPI_Str2Short(pHttpap_buf, httpap_tmp8));
+ 942   2              
+ 943   2                      // Save destination port //
+ 944   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_c_desport, &pHttpap_buf);
+ 945   2                      GCONFIG_SetClientDestPort(HTTPAPI_Str2Short(pHttpap_buf, httpap_tmp8));
+ 946   2              
+ 947   2                      // Save Destination host name //
+ 948   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_c_deshn, &pHttpap_buf);
+ 949   2                      GCONFIG_SetDestHostName(pHttpap_buf, httpap_tmp8);
+ 950   2      
+ 951   2                      // Save rs485 control bits //
+ 952   2                      httpap_GetElementValue(RECORD_SELECT_rs485, &pHttpap_buf);
+ 953   2                      GCONFIG_SetRs485Mode(*pHttpap_buf);
+ 954   2                      
+ 955   2                      goto HTTPAP_POST_BASIC_OK_SAVE_AND_REBOOT;
+ 956   2              }
+ 957   1      HTTPAP_POST_BASIC_ERR:
+ 958   1              pHttpap_buf = HTTP_TmpBuf;
+ 959   1              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+ 960   1              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&%s
+             -&%s&%s"
+ 961   1                                                                                              // warning message, delay time, delay time unit, delay time visible, redirect URL //
+ 962   1                                                                                               ,"Settings validation error!",2,"sec","off",FSYS_Manage[pConn->FileId].FName);
+ 963   1              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);                                                                                
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 17  
+
+ 964   1              return HTTP_POST_ERR;   
+ 965   1      
+ 966   1      HTTPAP_POST_BASIC_OK_SAVE_AND_REBOOT:
+ 967   1              // Store configuration to flash ROM //
+ 968   1              GCONFIG_WriteConfigData();      
+ 969   1      HTTPAP_POST_BASIC_OK_REBOOT:
+ 970   1              httpdap.Cmd = HTTPDAP_REBOOT_CMD;
+ 971   1              httpap_tmp8 = (GCONFIG_GetNetwork() & GCONFIG_NETWORK_DHCP_ENABLE) ? 20 : 15;//select delay time for DHCP
+             - enable or disable. //                        
+ 972   1                      
+ 973   1              pHttpap_buf = HTTP_TmpBuf;
+ 974   1              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+ 975   1              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&%s
+             -&%s&%s"
+ 976   1                                                                                              // warning message, delay time, delay time unit, delay time visible, redirect URL //
+ 977   1                                                                                       ,"Device reboot! please Wait",httpap_tmp8,"sec","on",FSYS_Manage[pInfo->HomePage].FName);                      
+ 978   1              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);                                                                                
+ 979   1              return HTTP_POST_ERR;   
+ 980   1                                                                                                              
+ 981   1      HTTPAP_POST_BASIC_OK_RESTORE:
+ 982   1              httpdap.Cmd = HTTPDAP_RESTORE_CMD;      
+ 983   1              pHttpap_buf = HTTP_TmpBuf;
+ 984   1              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);          
+ 985   1              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&%s
+             -&%s&%s"
+ 986   1                                                                                      // warning message, delay time, delay time unit, delay time visible, redirect URL //
+ 987   1                                                                                       ,"Device restore to default! please Wait",20,"sec","on",FSYS_Manage[pInfo->HomePage].FName);                   
+ 988   1              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);                
+ 989   1              return HTTP_POST_ERR;                                                                                                                   
+ 990   1      } /* End of httpap_PostBasicPage() */
+*** WARNING C280 IN LINE 957 OF ..\src\web_page\httpdap.c: 'HTTPAP_POST_BASIC_ERR': unreferenced label
+ 991          
+ 992          /*
+ 993           * ----------------------------------------------------------------------------
+ 994           * Function Name: httpap_GetAdvancePage()
+ 995           * Purpose:
+ 996           * Params:
+ 997           * Returns:
+ 998           * Note:
+ 999           * ----------------------------------------------------------------------------
+1000           */
+1001          U8_T httpap_GetAdvancePage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+1002          {
+1003   1              /* Load TFTP IP addr and file name for boot loarder */
+1004   1              httpap_tmp8 = HTTPAPI_Ulong2IpAddr(GCONFIG_GetTftpServerIp(GCONFIG_FTYPE_BLDR), HTTP_TmpBuf);
+1005   1              httpap_SetElementValue(RECORD_TEXT_tftps_ip_b, HTTP_TmpBuf, httpap_tmp8);
+1006   1              
+1007   1              GCONFIG_GetFilename(HTTP_TmpBuf, 128, GCONFIG_FTYPE_BLDR);
+1008   1              httpap_tmp8 = strlen(HTTP_TmpBuf);
+1009   1              httpap_SetElementValue(RECORD_TEXT_file_name_b, HTTP_TmpBuf, httpap_tmp8);
+1010   1                      
+1011   1              /* Load TFTP IP addr and file name for MCPU */
+1012   1              httpap_tmp8 = HTTPAPI_Ulong2IpAddr(GCONFIG_GetTftpServerIp(GCONFIG_FTYPE_MCPU), HTTP_TmpBuf);
+1013   1              httpap_SetElementValue(RECORD_TEXT_tftps_ip, HTTP_TmpBuf, httpap_tmp8);
+1014   1              
+1015   1              GCONFIG_GetFilename(HTTP_TmpBuf, 128, GCONFIG_FTYPE_MCPU);
+1016   1              httpap_tmp8 = strlen(HTTP_TmpBuf);
+1017   1              httpap_SetElementValue(RECORD_TEXT_file_name, HTTP_TmpBuf, httpap_tmp8);
+1018   1      
+1019   1              /* Load TFTP IP addr and file name for WCPU */
+1020   1              httpap_tmp8 = HTTPAPI_Ulong2IpAddr(GCONFIG_GetTftpServerIp(GCONFIG_FTYPE_WCPU), HTTP_TmpBuf);
+1021   1              httpap_SetElementValue(RECORD_TEXT_tftps_ip_w, HTTP_TmpBuf, httpap_tmp8);
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 18  
+
+1022   1              
+1023   1              GCONFIG_GetFilename(HTTP_TmpBuf, 128, GCONFIG_FTYPE_WCPU);
+1024   1              httpap_tmp8 = strlen(HTTP_TmpBuf);
+1025   1              httpap_SetElementValue(RECORD_TEXT_file_name_w, HTTP_TmpBuf, httpap_tmp8);
+1026   1              
+1027   1      
+1028   1      
+1029   1              /* Load DHCP server status */
+1030   1              httpap_tmp8 = GCONFIG_GetDhcpSrvStatus() ? 1 : 0;
+1031   1              httpap_SetElementValue(RECORD_RADIO_dhcps_onoff, &httpap_tmp8, 1);
+1032   1                      
+1033   1              /* Load DHCP server IP pool start address */
+1034   1              httpap_tmp8 = HTTPAPI_Ulong2IpAddr(GCONFIG_GetDhcpSrvStartIp(), HTTP_TmpBuf);
+1035   1              httpap_SetElementValue(RECORD_TEXT_dhcps_startip, HTTP_TmpBuf, httpap_tmp8);
+1036   1              
+1037   1              /* Load DHCP server IP pool end address */              
+1038   1              httpap_tmp8 = HTTPAPI_Ulong2IpAddr(GCONFIG_GetDhcpSrvEndIp(), HTTP_TmpBuf);
+1039   1              httpap_SetElementValue(RECORD_TEXT_dhcps_endip, HTTP_TmpBuf, httpap_tmp8);
+1040   1              
+1041   1              /* Load DHCP server default gateway */          
+1042   1              httpap_tmp8 = HTTPAPI_Ulong2IpAddr(GCONFIG_GetDhcpSrvDefGateway(), HTTP_TmpBuf);
+1043   1              httpap_SetElementValue(RECORD_TEXT_dhcps_gateway, HTTP_TmpBuf, httpap_tmp8);    
+1044   1              
+1045   1              /* Load DHCP server netmask */          
+1046   1              httpap_tmp8 = HTTPAPI_Ulong2IpAddr(GCONFIG_GetDhcpSrvNetmask(), HTTP_TmpBuf);
+1047   1              httpap_SetElementValue(RECORD_TEXT_dhcps_mask, HTTP_TmpBuf, httpap_tmp8);       
+1048   1              return HTTP_POST_OK;
+1049   1      } /* End of httpap_GetAdvancePage() */
+*** WARNING C280 IN LINE 1001 OF ..\src\web_page\httpdap.c: 'pConn': unreferenced local variable
+*** WARNING C280 IN LINE 1001 OF ..\src\web_page\httpdap.c: 'pInfo': unreferenced local variable
+1050          
+1051          /*
+1052           * ----------------------------------------------------------------------------
+1053           * Function Name: httpap_PostAdvancePage()
+1054           * Purpose:
+1055           * Params:
+1056           * Returns:
+1057           * Note:
+1058           * ----------------------------------------------------------------------------
+1059           */
+1060          U8_T httpap_PostAdvancePage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+1061          {
+1062   1              U8_T *pTmp, *pbuf1, *pbuf2, tmp;
+1063   1              
+1064   1              pbuf1 = HTTP_TmpBuf;
+1065   1              pbuf2 = HTTP_TmpBuf + 50;
+1066   1              
+1067   1               if (httpap_CheckElementUpdate(RECORD_TEXT_tftps_ip_b) != HTTPAPI_ERR && 
+1068   1                       httpap_CheckElementUpdate(RECORD_TEXT_file_name_b) != HTTPAPI_ERR)
+1069   1              {
+1070   2                      // Save TFTP IP addr //
+1071   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_tftps_ip_b, &pHttpap_buf);
+1072   2                      GCONFIG_SetTftpServerIp(HTTPAPI_IpAddr2Ulong(pHttpap_buf, httpap_tmp8), GCONFIG_FTYPE_BLDR);
+1073   2                              
+1074   2                      // Save TFTP File name //
+1075   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_file_name_b, &pHttpap_buf);
+1076   2                      GCONFIG_SetFilename(pHttpap_buf, httpap_tmp8,GCONFIG_FTYPE_BLDR);
+1077   2      
+1078   2                      // process firmware upgrade //
+1079   2                      if (httpap_CheckElementUpdateByName("FwBldUpg") != HTTPAPI_ERR)
+1080   2                      {
+1081   3                              // Store configuration to flash ROM //
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 19  
+
+1082   3      //                      GCONFIG_WriteConfigData();      
+1083   3      
+1084   3                              httpdap.Cmd = HTTPDAP_BLDR_FWUPGRADE_CMD;
+1085   3                              httpap_tmp8 = (GCONFIG_GetNetwork() & GCONFIG_NETWORK_DHCP_ENABLE) ? 20 : 15;//select delay time for DH
+             -CP enable or disable. //                              
+1086   3                              
+1087   3                              pHttpap_buf = HTTP_TmpBuf;
+1088   3                              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+1089   3                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&
+             -%s&%s&%s"
+1090   3                                                                                              // warning message, delay time, delay time unit, delay time visible, redirect URL //
+1091   3                                                                                               ,"Please Wait",httpap_tmp8,"sec","on",FSYS_Manage[pInfo->HomePage].FName);                     
+1092   3                              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);                                                                                
+1093   3                              return HTTP_POST_ERR;
+1094   3                      }
+1095   2                                              
+1096   2                      goto HTTPAP_POST_ADVANCE_OK;
+1097   2              }       
+1098   1              else if (httpap_CheckElementUpdate(RECORD_TEXT_tftps_ip) != HTTPAPI_ERR && 
+1099   1                      httpap_CheckElementUpdate(RECORD_TEXT_file_name) != HTTPAPI_ERR)
+1100   1              {
+1101   2                      // Save TFTP IP addr //
+1102   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_tftps_ip, &pHttpap_buf);
+1103   2                      GCONFIG_SetTftpServerIp(HTTPAPI_IpAddr2Ulong(pHttpap_buf, httpap_tmp8), GCONFIG_FTYPE_MCPU);
+1104   2                              
+1105   2                      // Save TFTP File name //
+1106   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_file_name, &pHttpap_buf);
+1107   2                      GCONFIG_SetFilename(pHttpap_buf, httpap_tmp8,GCONFIG_FTYPE_MCPU);
+1108   2      
+1109   2                      // process firmware upgrade //
+1110   2                      if (httpap_CheckElementUpdateByName("upgrade") != HTTPAPI_ERR)
+1111   2                      {
+1112   3                              // Store configuration to flash ROM //
+1113   3      //                      GCONFIG_WriteConfigData();      
+1114   3      
+1115   3                              httpdap.Cmd = HTTPDAP_FWUPGRADE_CMD;
+1116   3                              httpap_tmp8 = (GCONFIG_GetNetwork() & GCONFIG_NETWORK_DHCP_ENABLE) ? 60 : 55;//select delay time for DH
+             -CP enable or disable. //                              
+1117   3                              
+1118   3                              pHttpap_buf = HTTP_TmpBuf;
+1119   3                              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+1120   3                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&
+             -%s&%s&%s"
+1121   3                                                                                              // warning message, delay time, delay time unit, delay time visible, redirect URL //
+1122   3                                                                                               ,"Please Wait",httpap_tmp8,"sec","on",FSYS_Manage[pInfo->HomePage].FName);                     
+1123   3                              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);                                                                                
+1124   3                              return HTTP_POST_ERR;
+1125   3                      }
+1126   2                                              
+1127   2                      goto HTTPAP_POST_ADVANCE_OK;
+1128   2              }
+1129   1              else if (httpap_CheckElementUpdate(RECORD_TEXT_tftps_ip_w) != HTTPAPI_ERR && 
+1130   1                           httpap_CheckElementUpdate(RECORD_TEXT_file_name_w) != HTTPAPI_ERR)
+1131   1              {
+1132   2                      // Save TFTP IP addr //
+1133   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_tftps_ip_w, &pHttpap_buf);
+1134   2                      GCONFIG_SetTftpServerIp(HTTPAPI_IpAddr2Ulong(pHttpap_buf, httpap_tmp8), GCONFIG_FTYPE_WCPU);
+1135   2                              
+1136   2                      // Save TFTP File name //
+1137   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_file_name_w, &pHttpap_buf);
+1138   2                      GCONFIG_SetFilename(pHttpap_buf, httpap_tmp8,GCONFIG_FTYPE_WCPU);
+1139   2      
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 20  
+
+1140   2                      // process firmware upgrade //
+1141   2                      if (httpap_CheckElementUpdateByName("FwWUpg") != HTTPAPI_ERR)
+1142   2                      {
+1143   3                              // Store configuration to flash ROM //
+1144   3      //                      GCONFIG_WriteConfigData();      
+1145   3      
+1146   3                              httpdap.Cmd = HTTPDAP_WCPU_FWUPGRADE_CMD;
+1147   3                              httpap_tmp8 = (GCONFIG_GetNetwork() & GCONFIG_NETWORK_DHCP_ENABLE) ? 50 : 45;//select delay time for DH
+             -CP enable or disable. //                              
+1148   3                              
+1149   3                              pHttpap_buf = HTTP_TmpBuf;
+1150   3                              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+1151   3                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&
+             -%s&%s&%s"
+1152   3                                                                                              // warning message, delay time, delay time unit, delay time visible, redirect URL //
+1153   3                                                                                               ,"Please Wait",httpap_tmp8,"sec","on",FSYS_Manage[pInfo->HomePage].FName);                     
+1154   3                              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);                                                                                
+1155   3                              return HTTP_POST_ERR;
+1156   3                      }
+1157   2                                              
+1158   2                      goto HTTPAP_POST_ADVANCE_OK;
+1159   2              }                               
+1160   1              else if (httpap_CheckElementUpdate(RECORD_RADIO_dhcps_onoff) != HTTPAPI_ERR &&
+1161   1                               httpap_CheckElementUpdate(RECORD_TEXT_dhcps_mask) != HTTPAPI_ERR)      
+1162   1              {
+1163   2                      // Save DHCP server status //
+1164   2                      httpap_GetElementValue(RECORD_RADIO_dhcps_onoff, &pHttpap_buf);
+1165   2                      GCONFIG_SetDhcpSrvStatus(*pHttpap_buf);
+1166   2                      
+1167   2                      // Save DHCP server IP pool start address //            
+1168   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_dhcps_startip, &pHttpap_buf);          
+1169   2                      GCONFIG_SetDhcpSrvStartIp(HTTPAPI_IpAddr2Ulong(pHttpap_buf, httpap_tmp8));
+1170   2      
+1171   2                      // Save DHCP server IP pool end address //              
+1172   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_dhcps_endip, &pHttpap_buf);                            
+1173   2                      GCONFIG_SetDhcpSrvEndIp(HTTPAPI_IpAddr2Ulong(pHttpap_buf, httpap_tmp8));                
+1174   2              
+1175   2                      // Save DHCP server default gateway //          
+1176   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_dhcps_gateway, &pHttpap_buf);                          
+1177   2                      GCONFIG_SetDhcpSrvDefGateway(HTTPAPI_IpAddr2Ulong(pHttpap_buf, httpap_tmp8));                           
+1178   2              
+1179   2                      // Save DHCP server netmask //          
+1180   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_dhcps_mask, &pHttpap_buf);                             
+1181   2                      GCONFIG_SetDhcpSrvNetmask(HTTPAPI_IpAddr2Ulong(pHttpap_buf, httpap_tmp8));      
+1182   2                      
+1183   2                      goto HTTPAP_POST_ADVANCE_OK_SAVE_AND_REBOOT;            
+1184   2              }                       
+1185   1      HTTPAP_POST_ADVANCE_ERR:        
+1186   1              pHttpap_buf = HTTP_TmpBuf;
+1187   1              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+1188   1              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&%s
+             -&%s&%s"
+1189   1                                                                                              // warning message, delay time, delay time unit, delay time visible, redirect URL //
+1190   1                                                                                               ,"Settings validation error!",2,"sec","off",FSYS_Manage[pConn->FileId].FName); 
+1191   1              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);                                                                                
+1192   1              return HTTP_POST_ERR;
+1193   1      
+1194   1      HTTPAP_POST_ADVANCE_OK: 
+1195   1              // Store configuration to flash ROM //
+1196   1              GCONFIG_WriteConfigData();
+1197   1      
+1198   1              pHttpap_buf = HTTP_TmpBuf;
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 21  
+
+1199   1              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+1200   1              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&%s
+             -&%s&%s"
+1201   1                                                                                              // warning message, delay time, delay time unit, delay time visible, redirect URL //
+1202   1                                                                                               ,"Settings validation ok!",2,"sec","off",FSYS_Manage[pConn->FileId].FName);    
+1203   1              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);                                                                                
+1204   1              return HTTP_POST_ERR;
+1205   1                                      
+1206   1      HTTPAP_POST_ADVANCE_OK_SAVE_AND_REBOOT:
+1207   1              // Store configuration to flash ROM //
+1208   1              GCONFIG_WriteConfigData();      
+1209   1      
+1210   1              httpdap.Cmd = HTTPDAP_REBOOT_CMD;
+1211   1              httpap_tmp8 = (GCONFIG_GetNetwork() & GCONFIG_NETWORK_DHCP_ENABLE) ? 20 : 15;//select delay time for DHCP
+             - enable or disable. //                        
+1212   1              
+1213   1              pHttpap_buf = HTTP_TmpBuf;
+1214   1              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);          
+1215   1              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&%s
+             -&%s&%s"
+1216   1                                                                                      // warning message, delay time, delay time unit, delay time visible, redirect URL //
+1217   1                                                                                       ,"Device reboot! please Wait",httpap_tmp8,"sec","on",FSYS_Manage[pInfo->HomePage].FName);                      
+1218   1              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);                
+1219   1              return HTTP_POST_ERR;
+1220   1      } /* End of httpap_PostAdvancePage() */
+*** WARNING C280 IN LINE 1062 OF ..\src\web_page\httpdap.c: 'pTmp': unreferenced local variable
+*** WARNING C280 IN LINE 1062 OF ..\src\web_page\httpdap.c: 'tmp': unreferenced local variable
+*** WARNING C280 IN LINE 1185 OF ..\src\web_page\httpdap.c: 'HTTPAP_POST_ADVANCE_ERR': unreferenced label
+1221          
+1222          /*
+1223           * ----------------------------------------------------------------------------
+1224           * Function Name: httpap_GetSecurityPage()
+1225           * Purpose:
+1226           * Params:
+1227           * Returns:
+1228           * Note:
+1229           * ----------------------------------------------------------------------------
+1230           */
+1231          U8_T httpap_GetSecurityPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+1232          {
+1233   1              U8_T i, j;
+1234   1              
+1235   1              /* Clear new user and password */
+1236   1              httpap_SetElementValue(RECORD_TEXT_new_usn, 0, 0);
+1237   1              httpap_SetElementValue(RECORD_PASSWORD_old_psw, 0, 0);
+1238   1              httpap_SetElementValue(RECORD_PASSWORD_new_psw, 0, 0);
+1239   1              httpap_SetElementValue(RECORD_PASSWORD_cfm_psw, 0, 0);
+1240   1      
+1241   1              return HTTP_POST_OK;
+1242   1      } /* End of httpap_GetSecurityPage() */
+*** WARNING C280 IN LINE 1231 OF ..\src\web_page\httpdap.c: 'pConn': unreferenced local variable
+*** WARNING C280 IN LINE 1231 OF ..\src\web_page\httpdap.c: 'pInfo': unreferenced local variable
+*** WARNING C280 IN LINE 1233 OF ..\src\web_page\httpdap.c: 'i': unreferenced local variable
+*** WARNING C280 IN LINE 1233 OF ..\src\web_page\httpdap.c: 'j': unreferenced local variable
+1243          
+1244          /*
+1245           * ----------------------------------------------------------------------------
+1246           * Function Name: httpap_PostSecurityPage()
+1247           * Purpose:
+1248           * Params:
+1249           * Returns:
+1250           * Note:
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 22  
+
+1251           * ----------------------------------------------------------------------------
+1252           */
+1253          U8_T httpap_PostSecurityPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+1254          {
+1255   1              U8_T *pTmp, *pbuf1, *pbuf2, tmp;
+1256   1              
+1257   1              pbuf1 = HTTP_TmpBuf;
+1258   1              pbuf2 = HTTP_TmpBuf + 50;
+1259   1              
+1260   1              if (httpap_CheckElementUpdate(RECORD_TEXT_new_usn) != HTTPAPI_ERR)      
+1261   1              {
+1262   2                      // Save new username //
+1263   2                      GCONFIG_GetAdmin(pbuf1, pbuf2, &httpap_tmp8);
+1264   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_new_usn, &pHttpap_buf);
+1265   2                      
+1266   2                      memcpy(pbuf1, pHttpap_buf, httpap_tmp8);
+1267   2                      pbuf1[httpap_tmp8] = '\0';
+1268   2                      GCONFIG_SetAdmin(pbuf1, pbuf2);
+1269   2                      
+1270   2                      // Store configuration to flash ROM //
+1271   2                      goto HTTPAP_POST_SECURITY_OK_SAVE_AND_REBOOT;
+1272   2                              
+1273   2              }
+1274   1              else if (httpap_CheckElementUpdate(RECORD_PASSWORD_old_psw) != HTTPAPI_ERR && 
+1275   1                               httpap_CheckElementUpdate(RECORD_PASSWORD_cfm_psw) != HTTPAPI_ERR)
+1276   1              {
+1277   2                      // check old password //
+1278   2                      GCONFIG_GetAdmin(pbuf1, pbuf2, &httpap_tmp8);
+1279   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_PASSWORD_old_psw, &pHttpap_buf);
+1280   2                      if (strlen(pbuf2) != httpap_tmp8 || memcmp(pbuf2, pHttpap_buf, httpap_tmp8) != 0)
+1281   2                              goto HTTPAP_POST_SECURITY_ERR;
+1282   2                      
+1283   2                      // check new password and confirm password //
+1284   2                      tmp = httpap_GetElementValue(RECORD_PASSWORD_cfm_psw, &pTmp);           
+1285   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_PASSWORD_new_psw, &pHttpap_buf);
+1286   2                      if (tmp != httpap_tmp8 || memcmp(pTmp, pHttpap_buf, httpap_tmp8) != 0)
+1287   2                              goto HTTPAP_POST_SECURITY_ERR;
+1288   2      
+1289   2                      // save new password //         
+1290   2                      memcpy(pbuf2, pHttpap_buf, httpap_tmp8);
+1291   2                      pbuf2[httpap_tmp8] = '\0';
+1292   2                      GCONFIG_SetAdmin(pbuf1, pbuf2);
+1293   2      
+1294   2                      // Store configuration to flash ROM //
+1295   2                      goto HTTPAP_POST_SECURITY_OK_SAVE_AND_REBOOT;
+1296   2              }
+1297   1              
+1298   1      HTTPAP_POST_SECURITY_ERR:       
+1299   1              pHttpap_buf = HTTP_TmpBuf;
+1300   1              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+1301   1              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&%s
+             -&%s&%s"
+1302   1                                                                                              // warning message, delay time, delay time unit, delay time visible, redirect URL //
+1303   1                                                                                               ,"Settings validation error!",2,"sec","off",FSYS_Manage[pConn->FileId].FName); 
+1304   1              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);                                                                                
+1305   1              return HTTP_POST_ERR;
+1306   1              
+1307   1              
+1308   1      HTTPAP_POST_SECURITY_OK:        
+1309   1              // Store configuration to flash ROM //
+1310   1              GCONFIG_WriteConfigData();
+1311   1      
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 23  
+
+1312   1              pHttpap_buf = HTTP_TmpBuf;
+1313   1              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+1314   1              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&%s
+             -&%s&%s"
+1315   1                                                                                              // warning message, delay time, delay time unit, delay time visible, redirect URL //
+1316   1                                                                                               ,"Settings validation ok!",2,"sec","off",FSYS_Manage[pConn->FileId].FName);    
+1317   1              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);                                                                                
+1318   1              return HTTP_POST_ERR;
+1319   1      
+1320   1      HTTPAP_POST_SECURITY_OK_SAVE_AND_REBOOT:        
+1321   1              // Store configuration to flash ROM //
+1322   1              GCONFIG_WriteConfigData();
+1323   1      
+1324   1              httpdap.Cmd = HTTPDAP_REBOOT_CMD;
+1325   1              httpap_tmp8 = (GCONFIG_GetNetwork() & GCONFIG_NETWORK_DHCP_ENABLE) ? 20 : 15;//select delay time for DHCP
+             - enable or disable. //        
+1326   1              
+1327   1              pHttpap_buf = HTTP_TmpBuf;
+1328   1              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+1329   1              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&%s
+             -&%s&%s"
+1330   1                                                                                              // warning message, delay time, delay time unit, delay time visible, redirect URL //
+1331   1                                                                                       ,"Device reboot! please Wait",httpap_tmp8,"sec","on",FSYS_Manage[pInfo->HomePage].FName);                      
+1332   1              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);                                                                                
+1333   1              return HTTP_POST_ERR;
+1334   1      } /* End of httpap_PostSecurityPage() */
+*** WARNING C280 IN LINE 1308 OF ..\src\web_page\httpdap.c: 'HTTPAP_POST_SECURITY_OK': unreferenced label
+1335          
+1336          /*
+1337           * ----------------------------------------------------------------------------
+1338           * Function Name: httpap_GetWiFiPage()
+1339           * Purpose:
+1340           * Params:
+1341           * Returns:
+1342           * Note:
+1343           * ----------------------------------------------------------------------------
+1344           */
+1345          U8_T httpap_GetWiFiPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+1346          {
+1347   1              /* Network mode */
+1348   1              httpap_tmp8 = GCONFIG_GetWifiNetworkMode() ? 1:0;
+1349   1              httpap_SetElementValue(RECORD_SELECT_network_mode, &httpap_tmp8, 1);
+1350   1              
+1351   1              /* Channel */
+1352   1              httpap_tmp8 = GCONFIG_GetChannel();
+1353   1              httpap_SetElementValue(RECORD_SELECT_channel, &httpap_tmp8, 1);
+1354   1              
+1355   1              /* Service Area Name/SSID */
+1356   1              httpap_tmp8 = GCONFIG_GetSsid(HTTP_TmpBuf);
+1357   1              httpap_SetElementValue(RECORD_TEXT_ssid, HTTP_TmpBuf, httpap_tmp8);
+1358   1                              
+1359   1              /* Secirity Mode */
+1360   1              httpap_tmp8 = GCONFIG_GetWifiEncryptMode();// % 5;
+1361   1              httpap_SetElementValue(RECORD_SELECT_security_mode, &httpap_tmp8, 1);
+1362   1              
+1363   1              /* Key Length */        
+1364   1              httpap_tmp8 = GCONFIG_GetWifiWepKeyLength() ? 1:0;
+1365   1              httpap_SetElementValue(RECORD_SELECT_key_length, &httpap_tmp8, 1);
+1366   1              
+1367   1              if (httpap_tmp8)
+1368   1              {
+1369   2                      /* WEP 128bits Key 0~3 */
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 24  
+
+1370   2                      GCONFIG_GetWifiWep128Key(0, HTTP_TmpBuf);
+1371   2                      HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 13);
+1372   2                      httpap_SetElementValue(RECORD_TEXT_key_index_0, HTTP_TmpBuf+100, 26);
+1373   2      
+1374   2                      GCONFIG_GetWifiWep128Key(1, HTTP_TmpBuf);
+1375   2                      HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 13);
+1376   2                      httpap_SetElementValue(RECORD_TEXT_key_index_1, HTTP_TmpBuf+100, 26);
+1377   2      
+1378   2                      GCONFIG_GetWifiWep128Key(2, HTTP_TmpBuf);
+1379   2                      HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 13);
+1380   2                      httpap_SetElementValue(RECORD_TEXT_key_index_2, HTTP_TmpBuf+100, 26);
+1381   2      
+1382   2                      GCONFIG_GetWifiWep128Key(3, HTTP_TmpBuf);
+1383   2                      HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 13);
+1384   2                      httpap_SetElementValue(RECORD_TEXT_key_index_3, HTTP_TmpBuf+100, 26);   
+1385   2              }
+1386   1              else
+1387   1              {
+1388   2                      /* WEP 64bits Key 0~3 */
+1389   2                      GCONFIG_GetWifiWep64Key(0, HTTP_TmpBuf);
+1390   2                      HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 5);
+1391   2                      httpap_SetElementValue(RECORD_TEXT_key_index_0, HTTP_TmpBuf+100, 10);
+1392   2      
+1393   2                      GCONFIG_GetWifiWep64Key(1, HTTP_TmpBuf);
+1394   2                      HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 5);
+1395   2                      httpap_SetElementValue(RECORD_TEXT_key_index_1, HTTP_TmpBuf+100, 10);
+1396   2      
+1397   2                      GCONFIG_GetWifiWep64Key(2, HTTP_TmpBuf);
+1398   2                      HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 5);
+1399   2                      httpap_SetElementValue(RECORD_TEXT_key_index_2, HTTP_TmpBuf+100, 10);
+1400   2      
+1401   2                      GCONFIG_GetWifiWep64Key(3, HTTP_TmpBuf);
+1402   2                      HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 5);
+1403   2                      httpap_SetElementValue(RECORD_TEXT_key_index_3, HTTP_TmpBuf+100, 10);
+1404   2              }       
+1405   1              
+1406   1              /* Key Index Select */
+1407   1              httpap_tmp8 = GCONFIG_GetWifiWepKeyIndex();// % 4;
+1408   1              httpap_SetElementValue(RECORD_SELECT_key_index, &httpap_tmp8, 1);
+1409   1      
+1410   1              /* AES/TKIP Passphrase */       
+1411   1              httpap_tmp8 = GCONFIG_GetWifiPreShareKey(HTTP_TmpBuf);  
+1412   1              httpap_SetElementValue(RECORD_TEXT_aes_passphrase, HTTP_TmpBuf, httpap_tmp8);
+1413   1              
+1414   1              /* TX Data Rate */      
+1415   1              httpap_tmp8 = GCONFIG_GetWifiTxRate();//%sizof(IO_WiFiSupportTxRate);
+1416   1              httpap_SetElementValue(RECORD_SELECT_tx_data_rate, &httpap_tmp8, 1);
+1417   1              
+1418   1              /* Transmission Power */        
+1419   1              httpap_tmp8 = GCONFIG_GetWifiTxPowerLevel();
+1420   1              httpap_SetElementValue(RECORD_SELECT_tx_power, &httpap_tmp8, 1);
+1421   1              
+1422   1              /* Preamble */  
+1423   1              httpap_tmp8 = GCONFIG_GetWifiPreambleMode();
+1424   1              httpap_SetElementValue(RECORD_SELECT_preamble, &httpap_tmp8, 1);
+1425   1              
+1426   1              /* Beacon Interval */   
+1427   1              httpap_tmp16 = GCONFIG_GetWifiBcnInterval();
+1428   1              httpap_tmp8 = HTTPAPI_Short2Str(httpap_tmp16, HTTP_TmpBuf);
+1429   1              httpap_SetElementValue(RECORD_TEXT_beacon_intv, HTTP_TmpBuf, httpap_tmp8);
+1430   1              
+1431   1              /* RTS Threshold */
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 25  
+
+1432   1              httpap_tmp16 = GCONFIG_GetWifiRtsThreshold();
+1433   1              httpap_tmp8 = HTTPAPI_Short2Str(httpap_tmp16, HTTP_TmpBuf);
+1434   1              httpap_SetElementValue(RECORD_TEXT_rts_threshold, HTTP_TmpBuf, httpap_tmp8);
+1435   1              
+1436   1              /* Auto Power Control */
+1437   1              httpap_tmp8 = GCONFIG_GetWifiAutoPowerCtrl();
+1438   1              httpap_SetElementValue(RECORD_SELECT_auto_pwr_ctrl, &httpap_tmp8, 1);
+1439   1      
+1440   1              /* Protection Frame Type */
+1441   1              httpap_tmp8 = GCONFIG_GetProtectionFrameType();
+1442   1              httpap_SetElementValue(RECORD_SELECT_protfrm_type, &httpap_tmp8, 1);
+1443   1              
+1444   1              return HTTP_POST_OK;
+1445   1      } /* End of httpap_GetWiFiPage() */
+*** WARNING C280 IN LINE 1345 OF ..\src\web_page\httpdap.c: 'pConn': unreferenced local variable
+*** WARNING C280 IN LINE 1345 OF ..\src\web_page\httpdap.c: 'pInfo': unreferenced local variable
+1446          
+1447          /*
+1448           * ----------------------------------------------------------------------------
+1449           * Function Name: httpap_PostWiFiPage()
+1450           * Purpose:
+1451           * Params:
+1452           * Returns:
+1453           * Note:
+1454           * ----------------------------------------------------------------------------
+1455           */
+1456          U8_T httpap_PostWiFiPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+1457          {
+1458   1              U8_T i, j;
+1459   1              
+1460   1              if (httpap_CheckElementUpdate(RECORD_SELECT_network_mode) != HTTPAPI_ERR && 
+1461   1                      httpap_CheckElementUpdate(RECORD_TEXT_aes_passphrase) != HTTPAPI_ERR)
+1462   1              {
+1463   2                      // Network mode //
+1464   2                      httpap_GetElementValue(RECORD_SELECT_network_mode, &pHttpap_buf);
+1465   2                      GCONFIG_SetWifiNetworkMode(*pHttpap_buf);
+1466   2                                      
+1467   2                      // Channel //
+1468   2                      httpap_GetElementValue(RECORD_SELECT_channel, &pHttpap_buf);            
+1469   2                      GCONFIG_SetChannel(*pHttpap_buf);
+1470   2              
+1471   2                      // Service Area Name/SSID //
+1472   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_ssid, &pHttpap_buf);           
+1473   2                      GCONFIG_SetSsid(pHttpap_buf, httpap_tmp8);
+1474   2                                      
+1475   2                      // Secirity Mode //
+1476   2                      httpap_GetElementValue(RECORD_SELECT_security_mode, &pHttpap_buf);
+1477   2                      GCONFIG_SetWifiEncryptMode(*pHttpap_buf);
+1478   2                      
+1479   2                      // Key Length //        
+1480   2                      httpap_GetElementValue(RECORD_SELECT_key_length, &pHttpap_buf);
+1481   2                      GCONFIG_SetWifiWepKeyLength(*pHttpap_buf);
+1482   2                      i = *pHttpap_buf;
+1483   2                                      
+1484   2                      // Key Index Select //
+1485   2                      httpap_GetElementValue(RECORD_SELECT_key_index, &pHttpap_buf);          
+1486   2                      GCONFIG_SetWifiWepKeyIndex(*pHttpap_buf);
+1487   2      
+1488   2                      // WEP 64/128 bits key 1~4 //   
+1489   2                      for (j = 0; j < 4; j ++)
+1490   2                      {
+1491   3                              switch (j)
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 26  
+
+1492   3                              {
+1493   4                              case 0:
+1494   4                                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_key_index_0, &pHttpap_buf); break;
+1495   4                              case 1:
+1496   4                                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_key_index_1, &pHttpap_buf); break;
+1497   4                              case 2:
+1498   4                                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_key_index_2, &pHttpap_buf); break;
+1499   4                              case 3:
+1500   4                                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_key_index_3, &pHttpap_buf); break;
+1501   4                              }
+1502   3      
+1503   3                              if (httpap_tmp8)
+1504   3                              {
+1505   4                                      if (httpap_tmp8 != 10 && httpap_tmp8 != 26)
+1506   4                                              goto HTTPAP_POST_WIFI_ERR;
+1507   4                                      if (!HTTPAPI_HexText2Num(HTTP_TmpBuf, pHttpap_buf, httpap_tmp8))
+1508   4                                              goto HTTPAP_POST_WIFI_ERR;
+1509   4                                              
+1510   4                                      if (i)
+1511   4                                              GCONFIG_SetWifiWep128Key(j, HTTP_TmpBuf);
+1512   4                                      else
+1513   4                                              GCONFIG_SetWifiWep64Key(j, HTTP_TmpBuf);
+1514   4                              }
+1515   3                      }
+1516   2                      // AES/TKIP Passphrase //       
+1517   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_aes_passphrase, &pHttpap_buf);
+1518   2                      if (httpap_tmp8 < 8 || httpap_tmp8 > 63)
+1519   2                              goto HTTPAP_POST_WIFI_ERR;                      
+1520   2                      GCONFIG_SetWifiPreShareKey(pHttpap_buf, httpap_tmp8);
+1521   2                      
+1522   2                      goto HTTPAP_POST_WIFI_OK_SAVE_AND_REBOOT;
+1523   2              }
+1524   1              else if (httpap_CheckElementUpdate(RECORD_SELECT_tx_data_rate) != HTTPAPI_ERR && 
+1525   1                       httpap_CheckElementUpdate(RECORD_SELECT_auto_pwr_ctrl) != HTTPAPI_ERR)                  
+1526   1              {
+1527   2                      // TX Data Rate //      
+1528   2                      httpap_GetElementValue(RECORD_SELECT_tx_data_rate, &pHttpap_buf);               
+1529   2                      GCONFIG_SetWifiTxRate(*pHttpap_buf);
+1530   2                      
+1531   2                      // Transmission Power //        
+1532   2                      httpap_GetElementValue(RECORD_SELECT_tx_power, &pHttpap_buf);           
+1533   2                      GCONFIG_SetWifiTxPowerLevel(*pHttpap_buf);
+1534   2                      
+1535   2                      // Preamble //  
+1536   2                      httpap_GetElementValue(RECORD_SELECT_preamble, &pHttpap_buf);           
+1537   2                      GCONFIG_SetWifiPreambleMode(*pHttpap_buf);              
+1538   2                                      
+1539   2                      // Beacon Interval //   
+1540   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_beacon_intv, &pHttpap_buf);            
+1541   2                      httpap_tmp16 = HTTPAPI_Str2Short(pHttpap_buf, httpap_tmp8);             
+1542   2                      GCONFIG_SetWifiBcnInterval(httpap_tmp16);               
+1543   2                      
+1544   2                      // RTS Threshold //                                             
+1545   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_rts_threshold, &pHttpap_buf);          
+1546   2                      httpap_tmp16 = HTTPAPI_Str2Short(pHttpap_buf, httpap_tmp8);             
+1547   2                      GCONFIG_SetWifiRtsThreshold(httpap_tmp16);      
+1548   2                                      
+1549   2                      // Auto Power Control //                                                
+1550   2                      httpap_tmp8 = httpap_GetElementValue(RECORD_SELECT_auto_pwr_ctrl, &pHttpap_buf);                
+1551   2                      GCONFIG_SetWifiAutoPowerCtrl(*pHttpap_buf);             
+1552   2      
+1553   2                      // Protection Frame Type //
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 27  
+
+1554   2                      httpap_GetElementValue(RECORD_SELECT_protfrm_type, &pHttpap_buf);               
+1555   2                      GCONFIG_SetProtectionFrameType(*pHttpap_buf);           
+1556   2              
+1557   2                      goto HTTPAP_POST_WIFI_OK_SAVE_AND_REBOOT;
+1558   2              }       
+1559   1              
+1560   1      HTTPAP_POST_WIFI_ERR:   
+1561   1              pHttpap_buf = HTTP_TmpBuf;
+1562   1              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+1563   1              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&%s
+             -&%s&%s"
+1564   1                                                                                              // warning message, delay time, delay time unit, delay time visible, redirect URL //
+1565   1                                                                                               ,"Settings validation error!",2,"sec","off",FSYS_Manage[pConn->FileId].FName); 
+1566   1              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);
+1567   1              
+1568   1              return HTTP_POST_ERR;
+1569   1              
+1570   1      HTTPAP_POST_WIFI_OK_SAVE_AND_REBOOT:
+1571   1              // Store configuration to flash ROM //
+1572   1              GCONFIG_WriteConfigData();
+1573   1                                      
+1574   1              httpdap.Cmd = HTTPDAP_REBOOT_CMD;
+1575   1              httpap_tmp8 = (GCONFIG_GetNetwork() & GCONFIG_NETWORK_DHCP_ENABLE) ? 20 : 15;//select delay time for DHCP
+             - enable or disable. //                        
+1576   1              
+1577   1              pHttpap_buf = HTTP_TmpBuf;
+1578   1              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+1579   1              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&%s
+             -&%s&%s"
+1580   1                                                                                              // warning message, delay time, delay time unit, delay time visible, redirect URL //
+1581   1                                                                                       ,"Device reboot! please Wait",httpap_tmp8,"sec","on",FSYS_Manage[pInfo->HomePage].FName);                      
+1582   1              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);
+1583   1              return HTTP_POST_ERR;
+1584   1      } /* End of httpap_PostWiFiPage() */
+1585          
+1586          /*
+1587           * ----------------------------------------------------------------------------
+1588           * Function Name: httpap_GetWiFiWizardPage()
+1589           * Purpose:
+1590           * Params:
+1591           * Returns:
+1592           * Note:
+1593           * ----------------------------------------------------------------------------
+1594           */
+1595          U8_T httpap_GetWiFiWizardPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+1596          {
+1597   1              U8_T i, *pbuf1, *pbuf2;
+1598   1              
+1599   1              if (pConn->FileId == FILE_WIFIWZ_SYS)
+1600   1              {       
+1601   2                      /* Network mode */
+1602   2                      httpap_tmp8 = GCONFIG_GetWifiNetworkMode() ? 1:0;
+1603   2                      httpap_SetElementValue(RECORD_SELECT_wznetworkmode, &httpap_tmp8, 1);
+1604   2              
+1605   2                      /* Channel */
+1606   2                      httpap_tmp8 = GCONFIG_GetChannel();
+1607   2                      httpap_SetElementValue(RECORD_SELECT_wzchannel, &httpap_tmp8, 1);
+1608   2              
+1609   2                      /* Service Area Name/SSID */
+1610   2                      httpap_tmp8 = GCONFIG_GetSsid(HTTP_TmpBuf);
+1611   2                      httpap_SetElementValue(RECORD_TEXT_wzssid, HTTP_TmpBuf, httpap_tmp8);
+1612   2                              
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 28  
+
+1613   2                      /* Secirity Mode */
+1614   2                      httpap_tmp8 = GCONFIG_GetWifiEncryptMode();// % 5;
+1615   2                      httpap_SetElementValue(RECORD_SELECT_wzscrtmode, &httpap_tmp8, 1);
+1616   2              }
+1617   1              
+1618   1              if (pConn->FileId == FILE_WIFIWZ_WEP)
+1619   1              {       
+1620   2                      /* Key Length */        
+1621   2                      httpap_tmp8 = GCONFIG_GetWifiWepKeyLength() ? 1:0;
+1622   2                      httpap_SetElementValue(RECORD_SELECT_wzkeylength, &httpap_tmp8, 1);
+1623   2              
+1624   2                      if (httpap_tmp8)
+1625   2                      {
+1626   3                              /* WEP 128bits Key 0~3 */
+1627   3                              GCONFIG_GetWifiWep128Key(0, HTTP_TmpBuf);
+1628   3                              HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 13);
+1629   3                              httpap_SetElementValue(RECORD_TEXT_wzkeyindex0, HTTP_TmpBuf+100, 26);
+1630   3      
+1631   3                              GCONFIG_GetWifiWep128Key(1, HTTP_TmpBuf);
+1632   3                              HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 13);
+1633   3                              httpap_SetElementValue(RECORD_TEXT_wzkeyindex1, HTTP_TmpBuf+100, 26);
+1634   3      
+1635   3                              GCONFIG_GetWifiWep128Key(2, HTTP_TmpBuf);
+1636   3                              HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 13);
+1637   3                              httpap_SetElementValue(RECORD_TEXT_wzkeyindex2, HTTP_TmpBuf+100, 26);
+1638   3      
+1639   3                              GCONFIG_GetWifiWep128Key(3, HTTP_TmpBuf);
+1640   3                              HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 13);
+1641   3                              httpap_SetElementValue(RECORD_TEXT_wzkeyindex3, HTTP_TmpBuf+100, 26);
+1642   3                      }
+1643   2                      else
+1644   2                      {
+1645   3                              /* WEP 64bits Key 0~3 */
+1646   3                              GCONFIG_GetWifiWep64Key(0, HTTP_TmpBuf);
+1647   3                              HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 5);
+1648   3                              httpap_SetElementValue(RECORD_TEXT_wzkeyindex0, HTTP_TmpBuf+100, 10);
+1649   3      
+1650   3                              GCONFIG_GetWifiWep64Key(1, HTTP_TmpBuf);
+1651   3                              HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 5);
+1652   3                              httpap_SetElementValue(RECORD_TEXT_wzkeyindex1, HTTP_TmpBuf+100, 10);
+1653   3      
+1654   3                              GCONFIG_GetWifiWep64Key(2, HTTP_TmpBuf);
+1655   3                              HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 5);
+1656   3                              httpap_SetElementValue(RECORD_TEXT_wzkeyindex2, HTTP_TmpBuf+100, 10);
+1657   3      
+1658   3                              GCONFIG_GetWifiWep64Key(3, HTTP_TmpBuf);
+1659   3                              HTTPAPI_Num2HexText(HTTP_TmpBuf+100, HTTP_TmpBuf, 5);
+1660   3                              httpap_SetElementValue(RECORD_TEXT_wzkeyindex3, HTTP_TmpBuf+100, 10);
+1661   3                      }       
+1662   2                      
+1663   2                      /* Key Index Select */
+1664   2                      httpap_tmp8 = GCONFIG_GetWifiWepKeyIndex();// % 4;
+1665   2                      httpap_SetElementValue(RECORD_SELECT_wzkeyindex, &httpap_tmp8, 1);
+1666   2                      
+1667   2                      /* for WEP64bits and WEP128bit dynamic option */
+1668   2                      pbuf1 = HTTP_TmpBuf + 400;
+1669   2                      pbuf2 = HTTP_TmpBuf + 450;      
+1670   2                      pHttpap_buf = HTTP_TmpBuf;
+1671   2                      httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+1672   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "<input type=\"hidde
+             -n\" id=\"wep64_info\" value=\"");// Build hidden element start //             
+1673   2                      for (i = 0; i < 4; i ++)
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 29  
+
+1674   2                      {       
+1675   3                              GCONFIG_GetWifiWep64Key(i, pbuf1);
+1676   3                              HTTPAPI_Num2HexText(pbuf2, pbuf1, 5);
+1677   3                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%s&", pbuf2);      
+1678   3                      }
+1679   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "\"/>");/* Build hid
+             -den element end */                    
+1680   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "<input type=\"hidde
+             -n\" id=\"wep128_info\" value=\"");// Build hidden element start //                    
+1681   2                      for (i = 0; i < 4; i ++)
+1682   2                      {       
+1683   3                              GCONFIG_GetWifiWep128Key(i, pbuf1);
+1684   3                              HTTPAPI_Num2HexText(pbuf2, pbuf1, 13);
+1685   3                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%s&", pbuf2);
+1686   3                      }
+1687   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "\"/>");/* Build hid
+             -den element end */    
+1688   2                      HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, pConn->FileId, pConn);                                                                              
+1689   2                      return HTTP_POST_ERR;           
+1690   2              }
+1691   1              
+1692   1              if (pConn->FileId == FILE_WIFIWZ_WPA)
+1693   1              {       
+1694   2              
+1695   2                      /* AES/TKIP Passphrase */       
+1696   2                      httpap_tmp8 = GCONFIG_GetWifiPreShareKey(HTTP_TmpBuf);  
+1697   2                      httpap_SetElementValue(RECORD_TEXT_wzaes, HTTP_TmpBuf, httpap_tmp8);
+1698   2              }
+1699   1              
+1700   1              if (pConn->FileId == FILE_WIFIWZ_ADV)
+1701   1              {       
+1702   2                      /* TX Data Rate */      
+1703   2                      httpap_tmp8 = GCONFIG_GetWifiTxRate();//%sizof(IO_WiFiSupportTxRate);
+1704   2                      httpap_SetElementValue(RECORD_SELECT_wztxdatarate, &httpap_tmp8, 1);
+1705   2              
+1706   2                      /* Transmission Power */        
+1707   2                      httpap_tmp8 = GCONFIG_GetWifiTxPowerLevel();
+1708   2                      httpap_SetElementValue(RECORD_SELECT_wztxpower, &httpap_tmp8, 1);
+1709   2              
+1710   2                      /* Preamble */  
+1711   2                      httpap_tmp8 = GCONFIG_GetWifiPreambleMode();
+1712   2                      httpap_SetElementValue(RECORD_SELECT_wzpreamble, &httpap_tmp8, 1);
+1713   2              
+1714   2                      /* Beacon Interval */   
+1715   2                      httpap_tmp16 = GCONFIG_GetWifiBcnInterval();
+1716   2                      httpap_tmp8 = HTTPAPI_Short2Str(httpap_tmp16, HTTP_TmpBuf);
+1717   2                      httpap_SetElementValue(RECORD_TEXT_wzbeaconintv, HTTP_TmpBuf, httpap_tmp8);
+1718   2              
+1719   2                      /* RTS Threshold */
+1720   2                      httpap_tmp16 = GCONFIG_GetWifiRtsThreshold();
+1721   2                      httpap_tmp8 = HTTPAPI_Short2Str(httpap_tmp16, HTTP_TmpBuf);
+1722   2                      httpap_SetElementValue(RECORD_TEXT_wzrtsthreshold, HTTP_TmpBuf, httpap_tmp8);
+1723   2              
+1724   2                      /* Auto Power Control */
+1725   2                      httpap_tmp8 = GCONFIG_GetWifiAutoPowerCtrl();
+1726   2                      httpap_SetElementValue(RECORD_SELECT_wzautopwrctrl, &httpap_tmp8, 1);
+1727   2                      
+1728   2                      /* Protection Frame Type */
+1729   2                      httpap_tmp8 = GCONFIG_GetProtectionFrameType();
+1730   2                      httpap_SetElementValue(RECORD_SELECT_wzprotfrm_type, &httpap_tmp8, 1);          
+1731   2              }
+1732   1              
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 30  
+
+1733   1              if (pConn->FileId == FILE_WIFIWZ_STAT)
+1734   1              {
+1735   2                      U8_T tmpbuf[40];
+1736   2                      U16_T tmp16;
+1737   2              
+1738   2                      /* Build hidden element start */        
+1739   2                      pHttpap_buf = HTTP_TmpBuf;
+1740   2                      httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);
+1741   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "<input type=\"hidde
+             -n\" id=\"wifiwzstat\" value=\"");
+1742   2                      
+1743   2                      /* Network setting */
+1744   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%s&", GCONFIG_GetWi
+             -fiNetworkMode() ? "Ad-hoc" : "infrastructure");
+1745   2                      
+1746   2                      /* Channel */
+1747   2                      i = GCONFIG_GetChannel();
+1748   2                      if (i == 0)
+1749   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "auto&");           
+1750   2                      else
+1751   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%bu&",IO_WiFiSuppor
+             -tedCh[i]);
+1752   2                      
+1753   2                      /* SSID */
+1754   2                      i = GCONFIG_GetSsid(tmpbuf);
+1755   2                      tmpbuf[i] = '\0';               
+1756   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%s&", tmpbuf);
+1757   2                      
+1758   2                      /* Security Mode and key*/
+1759   2                      pbuf1 = HTTP_TmpBuf + 400;
+1760   2                      pbuf2 = HTTP_TmpBuf + 450;                      
+1761   2                      i = GCONFIG_GetWifiEncryptMode();
+1762   2                      if (i == 0)
+1763   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "no security&");
+1764   2                      else if (i == 1)
+1765   2                      {
+1766   3                              httpap_tmp8 = GCONFIG_GetWifiWepKeyIndex();
+1767   3                              GCONFIG_GetWifiWep64Key(httpap_tmp8, pbuf1);
+1768   3                              HTTPAPI_Num2HexText(pbuf2, pbuf1, 5);
+1769   3                              pbuf2[10] = '\0';
+1770   3                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "WEP64 bits, Index:
+             - %bu, key: %s&", httpap_tmp8, pbuf2);         
+1771   3                      }
+1772   2                      else if (i == 2)
+1773   2                      {
+1774   3                              httpap_tmp8 = GCONFIG_GetWifiWepKeyIndex();
+1775   3                              GCONFIG_GetWifiWep128Key(httpap_tmp8, pbuf1);
+1776   3                              HTTPAPI_Num2HexText(pbuf2, pbuf1, 13);
+1777   3                              pbuf2[26] = '\0';                       
+1778   3                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "WEP128 bits, Index
+             -: %bu, key: %s&", httpap_tmp8, pbuf2);                                
+1779   3                      }
+1780   2                      else if (i == 3)
+1781   2                      {
+1782   3                              httpap_tmp8 = GCONFIG_GetWifiPreShareKey(pbuf1);
+1783   3                              pbuf1[httpap_tmp8] = '\0';
+1784   3                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "TKIP, key: %s&", p
+             -buf1);
+1785   3                      }
+1786   2                      else if (i == 4)
+1787   2                      {
+1788   3                              httpap_tmp8 = GCONFIG_GetWifiPreShareKey(pbuf1);
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 31  
+
+1789   3                              pbuf1[httpap_tmp8] = '\0';                      
+1790   3                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "AES, key: %s&", pb
+             -uf1);
+1791   3                      }
+1792   2                      else
+1793   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "unsupport&");              
+1794   2                              
+1795   2                      /* Tx data rate */
+1796   2                      i = GCONFIG_GetWifiTxRate();
+1797   2                      if (i == 0)
+1798   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "auto&");
+1799   2                      else if (i == 1)
+1800   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "1 Mbps&");         
+1801   2                      else if (i == 2)
+1802   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "2 Mbps&");         
+1803   2                      else if (i == 3)
+1804   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "5.5 Mbps&");               
+1805   2                      else if (i == 4)
+1806   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "6 Mbps&");         
+1807   2                      else if (i == 5)
+1808   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "9 Mbps&");         
+1809   2                      else if (i == 6)
+1810   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "11 Mbps&");                
+1811   2                      else if (i == 7)
+1812   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "12 Mbps&");                
+1813   2                      else if (i == 8)
+1814   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "18 Mbps&");                
+1815   2                      else if (i == 9)
+1816   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "24 Mbps&");                
+1817   2                      else if (i == 10)
+1818   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "36 Mbps&");                
+1819   2                      else if (i == 11)
+1820   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "48 Mbps&");        
+1821   2                      else if (i == 12)
+1822   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "54 Mbps&");                                
+1823   2                      else
+1824   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "unsupport&");              
+1825   2                              
+1826   2                      /* Tx power */
+1827   2                      i = GCONFIG_GetWifiTxPowerLevel();
+1828   2                      if (i == 0)
+1829   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "100%%&");
+1830   2                      else if (i == 1)
+1831   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "50%%&");                           
+1832   2                      else if (i == 2)
+1833   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "25%%&");                           
+1834   2                      else if (i == 3)
+1835   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "12.5%%&");                                                         
+             -                
+1836   2                      else if (i == 4)
+1837   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "6.25%%&");                                                 
+1838   2                      else
+1839   2                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "unsupport&");              
+1840   2                      
+1841   2                      /* Preamble */  
+1842   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%s&", GCONFIG_GetWi
+             -fiPreambleMode() ? "auto":"long");
+1843   2                      
+1844   2                      /* Beacon Interval */
+1845   2                      tmp16 = GCONFIG_GetWifiBcnInterval();
+1846   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%u ms&", tmp16);
+1847   2      
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 32  
+
+1848   2                      /* RTS threshold */
+1849   2                      tmp16 = GCONFIG_GetWifiRtsThreshold();
+1850   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%u&", tmp16);
+1851   2                      
+1852   2                      /* Auto power control */
+1853   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%s&", GCONFIG_GetWi
+             -fiAutoPowerCtrl() ? "enable":"disable");
+1854   2      
+1855   2                      /* Protection Frame Type */
+1856   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%s&", GCONFIG_GetPr
+             -otectionFrameType() ? "Self-CTS":"RTS");
+1857   2      
+1858   2                      /* Build hidden element end and response message */     
+1859   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "\"/>");
+1860   2                      HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, pConn->FileId, pConn);      
+1861   2                      return HTTP_POST_ERR;   
+1862   2              }
+1863   1              return HTTP_POST_OK;
+1864   1      } /* End of httpap_GetWiFiWizardPage() */
+*** WARNING C280 IN LINE 1595 OF ..\src\web_page\httpdap.c: 'pInfo': unreferenced local variable
+1865          
+1866          /*
+1867           * ----------------------------------------------------------------------------
+1868           * Function Name: httpap_PostWiFiWizardPage()
+1869           * Purpose:
+1870           * Params:
+1871           * Returns:
+1872           * Note:
+1873           * ----------------------------------------------------------------------------
+1874           */
+1875          U8_T httpap_PostWiFiWizardPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+1876          {
+1877   1              U8_T i, j, *pTmp;
+1878   1              
+1879   1              if (pConn->FileId == FILE_WIFI_WZ)
+1880   1              {
+1881   2                      if (httpap_CheckElementUpdateByName("Apply") != HTTPAPI_ERR)
+1882   2                      {
+1883   3                              // Save to flash memory //
+1884   3                              GCONFIG_WriteConfigData();              
+1885   3                              
+1886   3                              httpdap.Cmd = HTTPDAP_REBOOT_CMD;
+1887   3                              httpap_tmp8 = (GCONFIG_GetNetwork() & GCONFIG_NETWORK_DHCP_ENABLE) ? 20 : 15;//select delay time for DH
+             -CP enable or disable. //                      
+1888   3                      
+1889   3                              pHttpap_buf = HTTP_TmpBuf;
+1890   3                              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_SYSMSG);          
+1891   3                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&
+             -%s&%s&%s"
+1892   3                                                                                                      // warning message, delay time, delay time unit, delay time visible, redirect URL //
+1893   3                                                                                                       ,"Device reboot! please Wait",httpap_tmp8,"sec","on",FSYS_Manage[pInfo->HomePage].FName);                      
+1894   3                              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_SYSMSG, pConn);                
+1895   3                              return HTTP_POST_ERR;                   
+1896   3                      }
+1897   2              }
+1898   1                      
+1899   1              if (pConn->FileId == FILE_WIFIWZ_SYS)
+1900   1              {
+1901   2                      if (httpap_CheckElementUpdate(RECORD_SELECT_wznetworkmode) == 0 && 
+1902   2                              httpap_CheckElementUpdate(RECORD_SELECT_wzscrtmode) == 3)       
+1903   2                      {
+1904   3                              // Network mode //
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 33  
+
+1905   3                              httpap_GetElementValue(RECORD_SELECT_wznetworkmode, &pHttpap_buf);
+1906   3                              GCONFIG_SetWifiNetworkMode(*pHttpap_buf);
+1907   3                                      
+1908   3                              // Channel //
+1909   3                              httpap_GetElementValue(RECORD_SELECT_wzchannel, &pHttpap_buf);          
+1910   3                              GCONFIG_SetChannel(*pHttpap_buf);
+1911   3              
+1912   3                              // Service Area Name/SSID //
+1913   3                              httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_wzssid, &pHttpap_buf);         
+1914   3                              GCONFIG_SetSsid(pHttpap_buf, httpap_tmp8);
+1915   3                                      
+1916   3                              // Secirity Mode //
+1917   3                              httpap_GetElementValue(RECORD_SELECT_wzscrtmode, &pHttpap_buf);
+1918   3                              GCONFIG_SetWifiEncryptMode(*pHttpap_buf);
+1919   3      
+1920   3                              if (httpap_CheckElementUpdateByName("Finish") != HTTPAPI_ERR)
+1921   3                                      HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_WIFIWZ_STAT, pConn);
+1922   3                              else
+1923   3                                      HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_WIFIWZ_ECRYTY, pConn);        
+1924   3                              return HTTP_POST_ERR;
+1925   3                      }
+1926   2                      goto HTTPAP_POST_WIFIWZ_ERR;
+1927   2              }
+1928   1              
+1929   1              if (pConn->FileId == FILE_WIFIWZ_ECRYTY)
+1930   1              {
+1931   2                      if (httpap_CheckElementUpdateByName("Back") != HTTPAPI_ERR)
+1932   2                      {
+1933   3                              HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_WIFIWZ_SYS, pConn);
+1934   3                              return HTTP_POST_ERR;           
+1935   3                      }               
+1936   2                      
+1937   2                      httpap_GetElementValue(RECORD_RADIO_wep, &pTmp);
+1938   2                      if (*pTmp == 0)
+1939   2                              HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_WIFIWZ_WEP, pConn);   
+1940   2                      else if (*pTmp == 1)
+1941   2                              HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_WIFIWZ_WPA, pConn);
+1942   2                      else
+1943   2                              HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_WIFIWZ_ADV, pConn);
+1944   2                      return HTTP_POST_ERR;
+1945   2              }       
+1946   1              
+1947   1              if (pConn->FileId == FILE_WIFIWZ_WEP)
+1948   1              {
+1949   2                      if (httpap_CheckElementUpdateByName("Back") != HTTPAPI_ERR)
+1950   2                      {
+1951   3                              HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_WIFIWZ_ECRYTY, pConn);
+1952   3                              return HTTP_POST_ERR;           
+1953   3                      }       
+1954   2                      
+1955   2                      if (httpap_CheckElementUpdate(RECORD_SELECT_wzkeylength) == 0 && 
+1956   2                      httpap_CheckElementUpdate(RECORD_TEXT_wzkeyindex3) == 5)                         
+1957   2                      {
+1958   3                              // Key Length //        
+1959   3                              httpap_GetElementValue(RECORD_SELECT_wzkeylength, &pHttpap_buf);
+1960   3                              GCONFIG_SetWifiWepKeyLength(*pHttpap_buf);
+1961   3                              i = *pHttpap_buf;
+1962   3                                      
+1963   3                              // Key Index Select //
+1964   3                              httpap_GetElementValue(RECORD_SELECT_wzkeyindex, &pHttpap_buf);         
+1965   3                              GCONFIG_SetWifiWepKeyIndex(*pHttpap_buf);
+1966   3      
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 34  
+
+1967   3                              // WEP 64/128 bits key 1~4 //   
+1968   3                              for (j = 0; j < 4; j ++)
+1969   3                              {
+1970   4                                      switch (j)
+1971   4                                      {
+1972   5                                      case 0:
+1973   5                                              httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_wzkeyindex0, &pHttpap_buf); break;
+1974   5                                      case 1:
+1975   5                                              httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_wzkeyindex1, &pHttpap_buf); break;
+1976   5                                      case 2:
+1977   5                                              httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_wzkeyindex2, &pHttpap_buf); break;
+1978   5                                      case 3:
+1979   5                                              httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_wzkeyindex3, &pHttpap_buf); break;
+1980   5                                      }
+1981   4      
+1982   4                                      if (httpap_tmp8)
+1983   4                                      {
+1984   5                                              if (httpap_tmp8 != 10 && httpap_tmp8 != 26)
+1985   5                                                      goto HTTPAP_POST_WIFIWZ_ERR;
+1986   5                                              if (!HTTPAPI_HexText2Num(HTTP_TmpBuf, pHttpap_buf, httpap_tmp8))
+1987   5                                                      goto HTTPAP_POST_WIFIWZ_ERR;
+1988   5                                              if (i)
+1989   5                                                      GCONFIG_SetWifiWep128Key(j, HTTP_TmpBuf);
+1990   5                                              else
+1991   5                                                      GCONFIG_SetWifiWep64Key(j, HTTP_TmpBuf);
+1992   5                                      }
+1993   4                              }
+1994   3                              if (httpap_CheckElementUpdateByName("Finish") != HTTPAPI_ERR)
+1995   3                                      HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_WIFIWZ_STAT, pConn);
+1996   3                              else
+1997   3                                      HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_WIFIWZ_ADV, pConn);   
+1998   3                              return HTTP_POST_ERR;
+1999   3                      }
+2000   2                      goto HTTPAP_POST_WIFIWZ_ERR;            
+2001   2              }
+2002   1              
+2003   1              if (pConn->FileId == FILE_WIFIWZ_WPA)
+2004   1              {
+2005   2                      if (httpap_CheckElementUpdateByName("Back") != HTTPAPI_ERR)
+2006   2                      {
+2007   3                              HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_WIFIWZ_ECRYTY, pConn);
+2008   3                              return HTTP_POST_ERR;           
+2009   3                      }       
+2010   2      
+2011   2                      if (httpap_CheckElementUpdate(RECORD_TEXT_wzaes) == 0)
+2012   2                      {
+2013   3                              // AES/TKIP Passphrase //       
+2014   3                              httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_wzaes, &pHttpap_buf);
+2015   3                              if (httpap_tmp8 < 8 || httpap_tmp8 > 63)
+2016   3                                      goto HTTPAP_POST_WIFIWZ_ERR;                    
+2017   3                              GCONFIG_SetWifiPreShareKey(pHttpap_buf, httpap_tmp8);
+2018   3                              
+2019   3                              if (httpap_CheckElementUpdateByName("Finish") != HTTPAPI_ERR)
+2020   3                                      HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_WIFIWZ_STAT, pConn);
+2021   3                              else                    
+2022   3                                      HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_WIFIWZ_ADV, pConn);   
+2023   3                              return HTTP_POST_ERR;
+2024   3                      }
+2025   2                      goto HTTPAP_POST_WIFIWZ_ERR;            
+2026   2              }
+2027   1              
+2028   1              if (pConn->FileId == FILE_WIFIWZ_ADV)
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 35  
+
+2029   1              {
+2030   2                      if (httpap_CheckElementUpdateByName("Back") != HTTPAPI_ERR)
+2031   2                      {
+2032   3                              HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_WIFIWZ_ECRYTY, pConn);
+2033   3                              return HTTP_POST_ERR;           
+2034   3                      }               
+2035   2                      if (httpap_CheckElementUpdate(RECORD_SELECT_wztxdatarate) == 0 && 
+2036   2                      httpap_CheckElementUpdate(RECORD_SELECT_wzautopwrctrl) == 5)                     
+2037   2                      {
+2038   3                              // TX Data Rate //      
+2039   3                              httpap_GetElementValue(RECORD_SELECT_wztxdatarate, &pHttpap_buf);               
+2040   3                              GCONFIG_SetWifiTxRate(*pHttpap_buf);
+2041   3                      
+2042   3                              // Transmission Power //        
+2043   3                              httpap_GetElementValue(RECORD_SELECT_wztxpower, &pHttpap_buf);          
+2044   3                              GCONFIG_SetWifiTxPowerLevel(*pHttpap_buf);
+2045   3                      
+2046   3                              // Preamble //  
+2047   3                              httpap_GetElementValue(RECORD_SELECT_wzpreamble, &pHttpap_buf);         
+2048   3                              GCONFIG_SetWifiPreambleMode(*pHttpap_buf);              
+2049   3                                      
+2050   3                              // Beacon Interval //   
+2051   3                              httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_wzbeaconintv, &pHttpap_buf);           
+2052   3                              httpap_tmp16 = HTTPAPI_Str2Short(pHttpap_buf, httpap_tmp8);             
+2053   3                              GCONFIG_SetWifiBcnInterval(httpap_tmp16);               
+2054   3                      
+2055   3                              // RTS Threshold //                                             
+2056   3                              httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_wzrtsthreshold, &pHttpap_buf);         
+2057   3                              httpap_tmp16 = HTTPAPI_Str2Short(pHttpap_buf, httpap_tmp8);             
+2058   3                              GCONFIG_SetWifiRtsThreshold(httpap_tmp16);      
+2059   3                                      
+2060   3                              // Auto Power Control //                                                
+2061   3                              httpap_tmp8 = httpap_GetElementValue(RECORD_SELECT_wzautopwrctrl, &pHttpap_buf);                
+2062   3                              GCONFIG_SetWifiAutoPowerCtrl(*pHttpap_buf);     
+2063   3      
+2064   3                              // Protection Frame Type //
+2065   3                              httpap_GetElementValue(RECORD_SELECT_wzprotfrm_type, &pHttpap_buf);             
+2066   3                              GCONFIG_SetProtectionFrameType(*pHttpap_buf);           
+2067   3                      
+2068   3                              HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_WIFIWZ_STAT, pConn);  
+2069   3                              return HTTP_POST_ERR;
+2070   3                      }
+2071   2                      goto HTTPAP_POST_WIFIWZ_ERR;            
+2072   2              }
+2073   1              
+2074   1              if (pConn->FileId == FILE_WIFIWZ_STAT)
+2075   1              {
+2076   2                      if (httpap_CheckElementUpdateByName("Back") != HTTPAPI_ERR)
+2077   2                      {
+2078   3                              HTTPAPI_ResponseRedirectMesssge(HTTP_TmpBuf, FILE_WIFIWZ_ADV, pConn);
+2079   3                              return HTTP_POST_ERR;           
+2080   3                      }       
+2081   2                      goto HTTPAP_POST_WIFIWZ_ERR;            
+2082   2              }       
+2083   1      HTTPAP_POST_WIFIWZ_ERR:
+2084   1              pHttpap_buf = HTTP_TmpBuf;
+2085   1              httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_WIFIWZ_MSG);
+2086   1              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_Hidden, NULL, "sysmsg_setting" ,"%s&%bu&%s
+             -&%s&%s"
+2087   1                                                                                      // warning message, delay time, delay time unit, delay time visible, redirect URL //
+2088   1                                                                                       ,"Settings validation error!",2,"sec","off",FSYS_Manage[pConn->FileId].FName);
+2089   1              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, FILE_WIFIWZ_MSG, pConn);
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 36  
+
+2090   1              return HTTP_POST_ERR;   
+2091   1      } /* End of httpap_PostWiFiWizardPage() */
+2092          
+2093          /*
+2094           * ----------------------------------------------------------------------------
+2095           * Function Name: httpap_PostHctentPage()
+2096           * Purpose:
+2097           * Params:
+2098           * Returns:
+2099           * Note:
+2100           * ----------------------------------------------------------------------------
+2101           */
+2102          U8_T httpap_PostHctentPage(HTTP_SERVER_CONN *pConn, HTTP_SERVER_INFO *pInfo)
+2103          {
+2104   1              U8_T i, *pTmp, *pbuf1, *pbuf2;
+2105   1              U8_T tmpbuf[20];
+2106   1                              
+2107   1              if (httpap_CheckElementUpdate(RECORD_TEXT_cmd) == HTTPAPI_ERR)
+2108   1                      return HTTP_POST_OK;
+2109   1      
+2110   1              httpap_tmp8 = httpap_GetElementValue(RECORD_TEXT_cmd, &pHttpap_buf);
+2111   1              
+2112   1              if (!memcmp(pHttpap_buf,"getwep",httpap_tmp8))
+2113   1              {
+2114   2                      /* for WEP64bits and WEP128bit dynamic option */
+2115   2                      pbuf1 = HTTP_TmpBuf + 400;
+2116   2                      pbuf2 = HTTP_TmpBuf + 450;      
+2117   2                      pHttpap_buf = HTTP_TmpBuf;
+2118   2                      httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_HCTENT);
+2119   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "<input type=\"hidde
+             -n\" id=\"0\" value=\"");// Build hidden element start //              
+2120   2                      for (i = 0; i < 4; i ++)
+2121   2                      {       
+2122   3                              GCONFIG_GetWifiWep64Key(i, pbuf1);
+2123   3                              HTTPAPI_Num2HexText(pbuf2, pbuf1, 5);
+2124   3                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%s&", pbuf2);      
+2125   3                      }
+2126   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "\"/>");/* Build hid
+             -den element end */                    
+2127   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "<input type=\"hidde
+             -n\" id=\"1\" value=\"");// Build hidden element start //                      
+2128   2                      for (i = 0; i < 4; i ++)
+2129   2                      {       
+2130   3                              GCONFIG_GetWifiWep128Key(i, pbuf1);
+2131   3                              HTTPAPI_Num2HexText(pbuf2, pbuf1, 13);
+2132   3                              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%s&", pbuf2);
+2133   3                      }
+2134   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "\"/>");/* Build hid
+             -den element end */    
+2135   2                      HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, pConn->FileId, pConn);                                                                              
+2136   2                      return HTTP_POST_ERR;
+2137   2              }
+2138   1              else if (!memcmp(pHttpap_buf,"getstatus",httpap_tmp8))
+2139   1              {
+2140   2              pHttpap_buf = (U8_T *)(GCONFIG_GetDeviceName());
+2141   2              httpap_tmp8 = strlen(pHttpap_buf);
+2142   2              if (httpap_tmp8 > 16)
+2143   2                      httpap_tmp8 = 16;
+2144   2                      memcpy(tmpbuf, pHttpap_buf, httpap_tmp8);
+2145   2                      tmpbuf[httpap_tmp8] = '\0';
+2146   2              
+2147   2              pHttpap_buf = HTTP_TmpBuf;
+C51 COMPILER V9.05   HTTPDAP                                                               04/11/2012 16:47:00 PAGE 37  
+
+2148   2                      httpap_tmp16 = HTTPAPI_BuildGenericHeaders(&pHttpap_buf, FILE_HCTENT);
+2149   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "<input type=\"hidde
+             -n\" id=\"0\" value=\"");// Build hidden element start //      
+2150   2                      httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%s&", tmpbuf);// Bu
+             -ild device name //
+2151   2              pTmp = (U8_T*)&(STOE_GetIPAddr());      
+2152   2              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%bu.%bu.%bu.%bu&"// 
+             -Build local IP address //
+2153   2                                                                                               ,pTmp[0],pTmp[1],pTmp[2],pTmp[3]);             
+2154   2              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%s&", GCONFIG_VERSIO
+             -N_STRING);// Build mcpu firmware version //
+2155   2              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%s&", MWIFAPP_WiFiIn
+             -fo.WcpuFwVersion);// Build wcpu firmware version //
+2156   2              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "0x%08lx%02bx%02bx&"/
+             -/ Build wcpu mac address //
+2157   2                                                                                               ,*(U32_T*)(MWIFAPP_WiFiInfo.WcpuMAC), MWIFAPP_WiFiInfo.WcpuMAC[4], MWIFAPP_WiFiInfo.WcpuMAC[5]
+             -);        
+2158   2              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%bx&", HSUR2_GetMode
+             -mStatus(1));// Build modem status //                                                                                   
+2159   2              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%s&"// Build protoco
+             -l type //        
+2160   2                                                                                               ,(GCONFIG_GetNetwork() & GCONFIG_NETWORK_PROTO_TCP)?"TCP":"UDP");                                                                      
+2161   2              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%s&"// Build connect
+             -ion type //                        
+2162   2                                                                                               ,(GS2W_GetTaskState() == GS2W_STATE_IDLE)?"Idle":"Connected");                                                                                                                                 
+2163   2              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%lu&"// Build HUART 
+             -TX byte counter //
+2164   2                                                                                               ,(GS2W_CONN_UDP == GS2W_GetConnType())? GUDPDAT_GetTxBytes(0) : GTCPDAT_GetTxBytes(0));
+2165   2              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "%lu"// Build HUART R
+             -X byte counter //
+2166   2                                                                                               ,(GS2W_CONN_UDP == GS2W_GetConnType())? GUDPDAT_GetRxBytes(0) : GTCPDAT_GetRxBytes(0));
+2167   2              httpap_tmp16 += HTTPAPI_BuildMessageBody(&pHttpap_buf, HTTPAPI_FmtOnly, NULL, NULL, "\"/>");// Build hidd
+             -en element end //     
+2168   2              HTTPAPI_ResponseResource(HTTP_TmpBuf, httpap_tmp16, pConn->FileId, pConn);      
+2169   2              return HTTP_POST_ERR;
+2170   2              }
+2171   1              
+2172   1              return HTTP_POST_OK;    
+2173   1      } /* End of httpap_PostHctentPage() */
+*** WARNING C280 IN LINE 2102 OF ..\src\web_page\httpdap.c: 'pInfo': unreferenced local variable
+2174          
+2175          /* Add to support customers' application, end */
+2176          
+2177          /* End of httpdap.c */
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =  18897    ----
+   CONSTANT SIZE    =   1046    ----
+   XDATA SIZE       =     62     263
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  30 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,19 @@
+//======================================================================
+// AX220xx Firmware Revision History
+// Module Name: MCPU/WCPU COMMUNICATION INTERFACE Module (mwif)
+//
+// This document describes the major changes, additions and bug fixes made 
+// to the AX220xx Firmware between released versions. 
+//======================================================================
+
+=============================
+Version 1.1.0  (2011-04-09)
+=============================
+1. Modify to support Only-Ethernet mode.
+   (By changing the definition MAC_ARBIT_MODE from MAC_ARBIT_WIFI to MAC_ARBIT_ETH)
+
+=============================
+Version 1.0.0  (2011-03-23)
+=============================
+1. Initial release
+

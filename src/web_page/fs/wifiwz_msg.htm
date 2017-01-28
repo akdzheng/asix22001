@@ -1,0 +1,56 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>wifi_msg</title>
+<head>
+<style type="text/css">
+<!--
+body{background-color: #EDEFEF;margin:0;}
+.wz{font-family: Verdana, Geneva, sans-serif;font-size: 0.33cm;color: #036;}
+.wz .title{color: #F00;padding-top: 20px;text-align: center;width:100%;font-size: 0.5cm;}
+-->
+</style></head>
+<body>
+<table border="0" align="left" cellpadding="0" cellspacing="0" style="width:100%">
+<tr class="wz">
+    <td class="title" colspan="2" id="dst">WiFi Wizard Warning Message</td>
+</tr>
+</table>
+<script language="JavaScript" type="text/javascript">
+<!--
+var second=1000, dst=document.getElementById("dst"), msg, countdown_timer, countdown_unit, countdown_display, redirect, style;
+var sysmsg_setting = document.getElementById("sysmsg_setting");
+if (sysmsg_setting!=null){
+	var setting_item=sysmsg_setting.value.split("&");
+msg = setting_item[0];
+countdown_timer = setting_item[1];
+countdown_unit = setting_item[2];
+countdown_display = setting_item[3];
+redirect = setting_item[4];
+style = setting_item[5];
+if (style != null) dst.className = style;
+	if (msg!=null) {
+		if (countdown_timer==null || isNaN(countdown_timer))
+			dst.innerHTML=msg;
+		else 
+			timer();
+	}
+}
+function timer() {
+	if (countdown_display==null || countdown_display=="off")
+		dst.innerHTML=msg;
+	else 
+		dst.innerHTML=msg+" "+countdown_timer+" "+countdown_unit;
+countdown_timer=countdown_timer-1;
+if(countdown_timer < 0) {
+		if (redirect==null)
+			location="./";
+		else 
+			location=redirect;
+	}else
+		setTimeout("timer()",second);
+}
+//-->
+</script>
+</body>
+</html>

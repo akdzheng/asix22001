@@ -1,0 +1,191 @@
+<html>
+<body>
+<pre>
+<h1>µVision Build Log</h1>
+<h2>Project:</h2>
+D:\working\AX220xx_RS-232-to-Wifi_v1.1.0_Source\proj_gs2w\gs2wifi.uvproj
+Project File Date:  06/08/2011
+
+<h2>Output:</h2>
+Build target 'gs2wifi'
+compiling interrupt.c...
+compiling mcpu.c...
+assembling START390.A51...
+compiling main.c...
+compiling dma.c...
+compiling mpsave.c...
+compiling mwif.c...
+compiling mwioctl.c...
+compiling mwifapp.c...
+..\SRC\MWIF\MWIFAPP.C(69): warning C280: 'value': unreferenced local variable
+..\SRC\MWIF\MWIFAPP.C(111): warning C280: 'pbuf': unreferenced local variable
+compiling uip.c...
+..\SRC\MTCPIP\UIP.C(1085): warning C196: mspace probably invalid
+compiling uip_arch.c...
+compiling uip_arp.c...
+compiling ping.c...
+compiling pppoe.c...
+compiling i2c.c...
+compiling dnsc.c...
+compiling telnet.c...
+..\SRC\MTELNET\TELNET.C(533): warning C280: 'id': unreferenced local variable
+..\SRC\MTELNET\TELNET.C(650): warning C280: 'conn_id': unreferenced local variable
+compiling clicmd.c...
+compiling console.c...
+compiling adapter.c...
+compiling mac.c...
+compiling phy.c...
+compiling stoe.c...
+compiling uart0.c...
+compiling httpd.c...
+..\SRC\MHTTP\HTTPD.C(799): warning C291: not every exit path returns a value
+compiling httpdapi.c...
+compiling filesys.c...
+..\SRC\WEB_PAGE\FILESYS.C(137): warning C280: 'pTag': unreferenced local variable
+compiling filesys_1.c...
+compiling filesys_2.c...
+compiling filesys_3.c...
+compiling httpdap.c...
+..\SRC\WEB_PAGE\HTTPDAP.C(130): warning C280: 'pInfo': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(200): warning C280: 'pConn': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(200): warning C280: 'fileId': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(217): warning C280: 'index': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(217): warning C280: 'pConn': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(284): warning C280: 'pConn': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(284): warning C280: 'pInfo': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(301): warning C280: 'pConn': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(301): warning C280: 'pInfo': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(318): warning C280: 'pConn': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(318): warning C280: 'pInfo': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(678): warning C280: 'pInfo': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(713): warning C280: 'pInfo': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(794): warning C280: 'pConn': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(794): warning C280: 'pInfo': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(975): warning C280: 'HTTPAP_POST_BASIC_ERR': unreferenced label
+..\SRC\WEB_PAGE\HTTPDAP.C(1019): warning C280: 'pConn': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(1019): warning C280: 'pInfo': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(1113): warning C280: 'pTmp': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(1113): warning C280: 'tmp': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(1288): warning C280: 'HTTPAP_POST_ADVANCE_ERR': unreferenced label
+..\SRC\WEB_PAGE\HTTPDAP.C(1334): warning C280: 'pConn': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(1334): warning C280: 'pInfo': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(1510): warning C280: 'pConn': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(1510): warning C280: 'pInfo': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(1760): warning C280: 'pInfo': unreferenced local variable
+..\SRC\WEB_PAGE\HTTPDAP.C(2267): warning C280: 'pInfo': unreferenced local variable
+compiling web_fun_act.c...
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(142): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(157): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(172): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(187): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(202): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(217): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(232): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(247): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(262): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(277): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(292): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(307): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(322): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(337): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(352): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(367): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(382): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(397): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(412): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(427): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(442): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(457): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(472): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(487): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(502): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(517): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(532): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(547): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(562): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(577): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(592): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(607): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(622): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(637): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(652): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(667): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(682): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(697): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(712): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(727): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(742): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(757): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(772): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(787): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(802): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(817): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(832): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(847): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(862): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(877): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(892): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(907): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(922): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(937): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(952): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(967): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(982): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(997): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1012): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1027): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1042): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1057): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1072): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1087): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1102): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1117): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1132): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1147): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1162): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1177): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1192): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1207): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1222): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1237): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1252): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1267): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1282): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1297): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1312): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1327): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1342): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1357): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1372): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1387): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1402): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1417): warning C280: 'pWebData': unreferenced local variable
+..\SRC\WEB_PAGE\WEB_FUN_ACT.C(1432): warning C280: 'pWebData': unreferenced local variable
+compiling gconfig.c...
+compiling gevent.c...
+compiling gtcpdat.c...
+compiling gudpbc.c...
+compiling gudpdat.c...
+compiling gudpmc.c...
+..\SRC\MGS2WIFI\GUDPMC.C(112): warning C280: 'pip': unreferenced local variable
+..\SRC\MGS2WIFI\GUDPMC.C(112): warning C280: 'remotePort': unreferenced local variable
+compiling gudpuc.c...
+..\SRC\MGS2WIFI\GUDPUC.C(118): warning C280: 'pip': unreferenced local variable
+..\SRC\MGS2WIFI\GUDPUC.C(118): warning C280: 'remotePort': unreferenced local variable
+compiling gs2w.c...
+compiling hsuart2.c...
+compiling CMIME64.c...
+compiling smtpc.c...
+compiling delay.c...
+compiling mstimer.c...
+compiling dhcpc.c...
+compiling dhcps.c...
+compiling printd.c...
+compiling at24c02.c...
+linking...
+Program Size: data=104.0 xdata=53253 const=76880 code=291660
+creating hex file from "gs2w"...
+User command #1: ..\hexbin /q gs2w.hex r2w.bin
+"gs2w" - 0 Error(s), 125 Warning(s).
+Clean started: Project: 'gs2wifi'
+   deleting intermediate output files for target 'gs2wifi'

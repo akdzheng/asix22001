@@ -1,0 +1,123 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>wifiwz_wep</title>
+<style type="text/css">
+<!--
+body{background-color: #EDEFEF;margin:0;}
+.wz{font-family: Verdana, Geneva, sans-serif;font-size: 0.33cm;color: #036;position:static;}
+.wz .title{padding:20px 0px 0px 100px; width:100%;font-size: 0.6cm;}
+.wz .msg{padding:20px 0px 0px 100px; width:100%;}
+.wz .msgerr{color: #F00;padding-left:10px;}
+.wz .item{text-align: left;padding:20px 0px 0px 120px;width:30%;}
+.wz .ipt{text-align: left;padding:20px 0px 0px 0px;width:60%;}
+.wz .smt{text-align: center;padding:50px 0px 0px 0px;}
+.wz .smt .btn{margin-left:30px;}
+-->
+</style></head>
+<body>
+<table border="0" align="left" cellpadding="0" cellspacing="0" style="width:100%">
+<form method="POST" onsubmit="return wzformchk(0);">  
+<tr class="wz">
+    <td class="title" colspan="2">Enter a WEP Key for Your WiFi Network</td>
+</tr>
+<tr class="wz">
+    <td class="msg" colspan="2">Please select the key length, key index and enter up to 4 applicable key strings.</td>
+</tr>
+<tr class="wz">
+    <td class="item">Key Length:</td>
+	<td class="ipt"><select name="wzkeylength" id="key_length" style="width: 150px" onchange="fillwep()">
+    <option value="0" selected >64 bits</option>
+    <option value="1"          >128 bits</option>
+    </select></td>
+</tr>
+<tr class="wz">
+    <td class="item">Key Index:</td>
+	<td class="ipt"><select name="wzkeyindex" style="WIDTH: 150px">
+    <option value="0" selected >Key Index 0</option>
+    <option value="1"          >Key Index 1</option>
+    <option value="2"          >Key Index 2</option>
+    <option value="3"          >Key Index 3</option>
+    </select></td>
+</tr>
+<tr class="wz">
+    <td class="msg" colspan="2">The WEP key length must be 10-digit hex for WEP-64 or 26-digit hex for WEP-128.</td>
+</tr>
+<tr class="wz">
+    <td class="item">Key Index 0:</td>
+	<td class="ipt"><input name="wzkeyindex0" id="key_index_0" type="text" style="width: 200px" value="" maxlength="26" /></td>
+</tr>
+<tr class="wz">
+    <td class="item">Key Index 1:</td>
+	<td class="ipt"><input name="wzkeyindex1" id="key_index_1" type="text" style="width: 200px" value="" maxlength="26" /></td>
+</tr>
+<tr class="wz">
+    <td class="item">Key Index 2:</td>
+	<td class="ipt"><input name="wzkeyindex2" id="key_index_2" type="text" style="width: 200px" value="" maxlength="26" /></td>
+</tr>
+<tr class="wz">
+    <td class="item">Key Index 3:</td>
+	<td class="ipt"><input name="wzkeyindex3" id="key_index_3" type="text" style="width: 200px" value="" maxlength="26" /></td>
+</tr>
+<tr class="wz">
+    <td class="smt" colspan="2">
+	<input name="Next" type="submit" style="width: 60px" value="Next" class="btn" onclick="submitType=1;"/>
+	<input name="Back" type="submit" style="width: 60px" value="Back" class="btn" onclick="submitType=0;"/>
+	<input name="Finish" type="submit" style="width: 60px" value="Finish" class="btn" onclick="submitType=1;"/>
+	</td>
+</tr>
+</form>
+</table>
+<script language="JavaScript" type="text/javascript">
+<!--
+var submitType;
+fillwep();
+function fillwep() {
+var i, wep_info;
+if (document.getElementById("wep64_info") != null && document.getElementById("wep128_info") != null){
+	if (document.getElementById("key_length").value == "0")	{
+var wep_info = document.getElementById("wep64_info").value.split("&");
+			for (i=0;wep_info[i]!=null && document.getElementById("key_index_"+i)!=null;i++)
+				document.getElementById("key_index_"+i).value=wep_info[i];
+	} else {
+var wep_info = document.getElementById("wep128_info").value.split("&");
+			for (i=0;wep_info[i]!=null && document.getElementById("key_index_"+i)!=null;i++)
+				document.getElementById("key_index_"+i).value = wep_info[i];
+		}
+	}
+}
+function wzformchk(idx){
+var items=document.forms[idx].elements, keylen=document.getElementById("key_length").selectedIndex, i, errFlag=0;
+	if (submitType==0)
+		return;
+for (i=0;i<items.length;i++){
+var errMsg="";
+if (items[i].name == "wzkeyindex0" || items[i].name == "wzkeyindex1" || items[i].name == "wzkeyindex2" || items[i].name == "wzkeyindex3"){
+			if (keylen!=0 && items[i].value.length!=26){
+				errMsg="Your key length must be 26";
+				errFlag++;
+			}else if (keylen==0 && items[i].value.length!=10){
+				errMsg="Your key length must be 10";
+				errFlag++;
+			}
+		}else
+			continue;
+var errSpan=document.createElement("span");
+errSpan.appendChild(document.createTextNode(errMsg));
+errSpan.className="msgerr";
+errParent=items[i].parentNode;
+		if (errParent.lastChild.className=="msgerr")
+			errParent.replaceChild(errSpan,errParent.lastChild);
+		else 
+			errParent.appendChild(errSpan);
+	}
+	if (errFlag) 
+		return false;
+	else 
+		return true;
+}
+//-->
+</script>
+</body>
+</html>

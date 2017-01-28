@@ -1,0 +1,2649 @@
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 1   
+
+
+C51 COMPILER V9.05, COMPILATION OF MODULE FILESYS
+OBJECT MODULE PLACED IN .\filesys.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE ..\src\web_page\filesys.c LARGE OMF2 ROM(D16M) BROWSE INTVECTOR(0X8020) INC
+                    -DIR(..\src\main;..\src\mcpu;..\src\mswdma;..\src\uart0;..\src\mmstimer;..\src\mwif;..\src\madapter;..\src\mtcpip;..\src\
+                    -mping;..\src\mpppoe;..\src\si2c;..\src\mdnsc;..\src\mconsole;..\src\mtelnet;..\src\meeprom;..\src\mmac;..\src\mdhcpc;..\
+                    -src\mhttp;..\src\mgs2wifi;..\src\mhsuart;..\src\msmtpc;..\src\web_page;..\src\mdhcps;..\src\mdebug;..\src\counter) DEFIN
+                    -E(RuntimeCodeAt32KH) VARBANKING DEBUG PRINT(.\filesys.lst) OBJECT(.\filesys.obj)
+
+line level    source
+
+   1          /*
+   2           ******************************************************************************
+   3           *     Copyright (c) 2010 ASIX Electronic Corporation      All rights reserved.
+   4           *
+   5           *     This is unpublished proprietary source code of ASIX Electronic Corporation
+   6           *
+   7           *     The copyright notice above does not evidence any actual or intended
+   8           *     publication of such source code.
+   9           ******************************************************************************
+  10           */
+  11          /*=============================================================================
+  12           * Module Name: filesys.c
+  13           * Purpose:
+  14           * Author:
+  15           * Date:
+  16           * Notes:
+  17           * $Log: filesys.c,v $
+  18           *=============================================================================
+  19           */
+  20          
+  21          /* INCLUDE FILE DECLARATIONS */
+  22          #include "filesys.h"
+  23          #include "httpd.h"
+  24          
+  25          
+  26          /* GLOBAL VARIABLE DECLARATIONS */
+  27          #if (MAX_POST_RECORDS)
+  28          POST_RECORD XDATA POST_Record[MAX_POST_RECORDS];
+  29          #endif
+  30          #if (MAX_POST_BUF_SUBMIT)
+  31          static BUF_SUBMIT XDATA BUF_Submit[MAX_POST_BUF_SUBMIT];
+  32          #endif
+  33          #if (MAX_POST_BUF_RADIO)
+  34          static BUF_RADIO XDATA BUF_Radio[MAX_POST_BUF_RADIO];
+  35          #endif
+  36          #if (MAX_POST_BUF_TEXT)
+  37          static BUF_TEXT XDATA BUF_Text[MAX_POST_BUF_TEXT];
+  38          #endif
+  39          #if (MAX_POST_BUF_PASSWORD)
+  40          static BUF_PASSWORD XDATA BUF_Password[MAX_POST_BUF_PASSWORD];
+  41          #endif
+  42          #if (MAX_POST_BUF_TAG)
+              static BUF_TAG XDATA BUF_Tag[MAX_POST_BUF_TAG];
+              #endif
+  45          #if (MAX_POST_BUF_SELECT)
+  46          static BUF_SELECT XDATA BUF_Select[MAX_POST_BUF_SELECT];
+  47          #endif
+  48          
+  49          
+  50          /* STATIC VARIABLE DECLARATIONS */
+  51          extern U8_T const FAR WebImg_Logo[];
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 2   
+
+  52          extern U8_T const FAR WebImg_tbbg[];
+  53          extern U8_T const FAR WebAdvanced[];
+  54          extern U8_T const FAR WebAxcss0[];
+  55          extern U8_T const FAR WebAxcss1[];
+  56          extern U8_T const FAR WebAxjs0[];
+  57          extern U8_T const FAR WebBasic[];
+  58          extern U8_T const FAR WebHctent[];
+  59          extern U8_T const FAR WebIndex[];
+  60          extern U8_T const FAR WebSecurity[];
+  61          extern U8_T const FAR WebStatus[];
+  62          extern U8_T const FAR WebSysconfirm[];
+  63          extern U8_T const FAR WebSysmsg[];
+  64          extern U8_T const FAR WebWifi[];
+  65          extern U8_T const FAR WebWifiwz_adv[];
+  66          extern U8_T const FAR WebWifiwz_ecryty[];
+  67          extern U8_T const FAR WebWifiwz_msg[];
+  68          extern U8_T const FAR WebWifiwz_stat[];
+  69          extern U8_T const FAR WebWifiwz_sys[];
+  70          extern U8_T const FAR WebWifiwz_wep[];
+  71          extern U8_T const FAR WebWifiwz_wpa[];
+  72          extern U8_T const FAR WebWifi_wz[];
+  73          
+  74          #if (MAX_STORE_FILE_NUM)
+  75          FILE_MANAGEMEMT const FAR FSYS_Manage[MAX_STORE_FILE_NUM] = 
+  76          {
+  77              /* for file 0 */ {1, 1, "img_Logo.jpg", 16182, WebImg_Logo, 0, (void*)0},
+  78              /* for file 1 */ {1, 1, "img_tbbg.gif", 200, WebImg_tbbg, 1, (void*)0},
+  79              /* for file 2 */ {1, 0, "advanced.htm", 4493, WebAdvanced, 2, (void*)0},
+  80              /* for file 3 */ {1, 3, "axcss0.css", 1790, WebAxcss0, 3, (void*)0},
+  81              /* for file 4 */ {1, 3, "axcss1.css", 1344, WebAxcss1, 4, (void*)0},
+  82              /* for file 5 */ {1, 2, "axjs0.js", 5193, WebAxjs0, 5, (void*)0},
+  83              /* for file 6 */ {1, 0, "basic.htm", 5489, WebBasic, 6, (void*)0},
+  84              /* for file 7 */ {1, 0, "hctent.htm", 609, WebHctent, 7, (void*)0},
+  85              /* for file 8 */ {1, 0, "index.htm", 1226, WebIndex, 8, (void*)0},
+  86              /* for file 9 */ {1, 0, "security.htm", 2177, WebSecurity, 9, (void*)0},
+  87              /* for file 10 */ {1, 0, "status.htm", 4127, WebStatus, 10, (void*)0},
+  88              /* for file 11 */ {1, 0, "sysconfirm.htm", 2150, WebSysconfirm, 11, (void*)0},
+  89              /* for file 12 */ {1, 0, "sysmsg.htm", 2222, WebSysmsg, 12, (void*)0},
+  90              /* for file 13 */ {1, 0, "wifi.htm", 7472, WebWifi, 13, (void*)0},
+  91              /* for file 14 */ {1, 0, "wifiwz_adv.htm", 5165, WebWifiwz_adv, 14, (void*)0},
+  92              /* for file 15 */ {1, 0, "wifiwz_ecryty.htm", 1997, WebWifiwz_ecryty, 15, (void*)0},
+  93              /* for file 16 */ {1, 0, "wifiwz_msg.htm", 1819, WebWifiwz_msg, 16, (void*)0},
+  94              /* for file 17 */ {1, 0, "wifiwz_stat.htm", 3001, WebWifiwz_stat, 17, (void*)0},
+  95              /* for file 18 */ {1, 0, "wifiwz_sys.htm", 4492, WebWifiwz_sys, 18, (void*)0},
+  96              /* for file 19 */ {1, 0, "wifiwz_wep.htm", 4987, WebWifiwz_wep, 19, (void*)0},
+  97              /* for file 20 */ {1, 0, "wifiwz_wpa.htm", 2654, WebWifiwz_wpa, 20, (void*)0},
+  98              /* for file 21 */ {1, 0, "wifi_wz.htm", 1573, WebWifi_wz, 21, (void*)0},
+  99          };
+ 100          #endif
+ 101          
+ 102          /* LOCAL SUBPROGRAM DECLARATIONS */
+ 103          static void fsys_InitPostRecord(void);
+ 104          
+ 105          /*
+ 106           * ----------------------------------------------------------------------------
+ 107           * Function Name: FSYS_Init
+ 108           * Purpose:
+ 109           * Params:
+ 110           * Returns:
+ 111           * Note:
+ 112           * ----------------------------------------------------------------------------
+ 113           */
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 3   
+
+ 114          void FSYS_Init(void)
+ 115          {
+ 116   1      
+ 117   1      
+ 118   1              fsys_InitPostRecord();
+ 119   1      }
+ 120          
+ 121          /*
+ 122           * ----------------------------------------------------------------------------
+ 123           * Function Name: fsys_InitPostRecord
+ 124           * Purpose:
+ 125           * Params:
+ 126           * Returns:
+ 127           * Note:
+ 128           * ----------------------------------------------------------------------------
+ 129           */
+ 130          void fsys_InitPostRecord(void)
+ 131          {
+ 132   1              BUF_SUBMIT XDATA*       pSubmit;
+ 133   1              BUF_TEXT XDATA*         pText;
+ 134   1              BUF_PASSWORD XDATA*             pPassword;
+ 135   1              BUF_TAG XDATA*          pTag;
+ 136   1      #if (MAX_POST_BUF_RADIO)
+ 137   1              BUF_RADIO XDATA*        pRadio;
+ 138   1      #endif
+ 139   1      #if (MAX_POST_BUF_SELECT)
+ 140   1              BUF_SELECT XDATA*       pSelect;
+ 141   1      #endif
+ 142   1              U8_T                            index;
+ 143   1      
+ 144   1              static U8_T XDATA postbuf_text0[2][16];
+ 145   1              static U8_T XDATA postbuf_text1[2][64];
+ 146   1              static U8_T XDATA postbuf_text2[2][16];
+ 147   1              static U8_T XDATA postbuf_text3[2][64];
+ 148   1              static U8_T XDATA postbuf_text4[2][16];
+ 149   1              static U8_T XDATA postbuf_text5[2][64];
+ 150   1              static U8_T XDATA postbuf_text6[2][16];
+ 151   1              static U8_T XDATA postbuf_text7[2][16];
+ 152   1              static U8_T XDATA postbuf_text8[2][16];
+ 153   1              static U8_T XDATA postbuf_text9[2][16];
+ 154   1              static U8_T XDATA postbuf_text10[2][17];
+ 155   1              static U8_T XDATA postbuf_text11[2][16];
+ 156   1              static U8_T XDATA postbuf_text12[2][16];
+ 157   1              static U8_T XDATA postbuf_text13[2][16];
+ 158   1              static U8_T XDATA postbuf_text14[2][16];
+ 159   1              static U8_T XDATA postbuf_text15[2][6];
+ 160   1              static U8_T XDATA postbuf_text16[2][6];
+ 161   1              static U8_T XDATA postbuf_text17[2][36];
+ 162   1              static U8_T XDATA postbuf_text18[2][6];
+ 163   1              static U8_T XDATA postbuf_text19[2][16];
+ 164   1              static U8_T XDATA postbuf_text20[2][17];
+ 165   1              static U8_T XDATA postbuf_text21[2][16];
+ 166   1              static U8_T XDATA postbuf_text22[2][32];
+ 167   1              static U8_T XDATA postbuf_text23[2][27];
+ 168   1              static U8_T XDATA postbuf_text24[2][27];
+ 169   1              static U8_T XDATA postbuf_text25[2][27];
+ 170   1              static U8_T XDATA postbuf_text26[2][27];
+ 171   1              static U8_T XDATA postbuf_text27[2][64];
+ 172   1              static U8_T XDATA postbuf_text28[2][7];
+ 173   1              static U8_T XDATA postbuf_text29[2][7];
+ 174   1              static U8_T XDATA postbuf_text30[2][7];
+ 175   1              static U8_T XDATA postbuf_text31[2][7];
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 4   
+
+ 176   1              static U8_T XDATA postbuf_text32[2][32];
+ 177   1              static U8_T XDATA postbuf_text33[2][27];
+ 178   1              static U8_T XDATA postbuf_text34[2][27];
+ 179   1              static U8_T XDATA postbuf_text35[2][27];
+ 180   1              static U8_T XDATA postbuf_text36[2][27];
+ 181   1              static U8_T XDATA postbuf_text37[2][64];
+ 182   1              static U8_T XDATA postbuf_password0[2][17];
+ 183   1              static U8_T XDATA postbuf_password1[2][16];
+ 184   1              static U8_T XDATA postbuf_password2[2][16];
+ 185   1              static U8_T XDATA postbuf_password3[2][16];
+ 186   1      
+ 187   1              for (index = 1; index < MAX_POST_RECORDS; index++)
+ 188   1                      POST_Record[index].Occupy = 0;
+ 189   1      
+ 190   1              /* for record 0 */
+ 191   1              POST_Record[0].Occupy = 1;
+ 192   1              POST_Record[0].PostType = POST_TYPE_TEXT;
+ 193   1              POST_Record[0].Name[0] = 't';
+ 194   1              POST_Record[0].Name[1] = 'f';
+ 195   1              POST_Record[0].Name[2] = 't';
+ 196   1              POST_Record[0].Name[3] = 'p';
+ 197   1              POST_Record[0].Name[4] = 's';
+ 198   1              POST_Record[0].Name[5] = '_';
+ 199   1              POST_Record[0].Name[6] = 'i';
+ 200   1              POST_Record[0].Name[7] = 'p';
+ 201   1              POST_Record[0].Name[8] = '_';
+ 202   1              POST_Record[0].Name[9] = 'b';
+ 203   1              POST_Record[0].NameLen = 10;
+ 204   1              POST_Record[0].FileIndex = 2;
+ 205   1              POST_Record[0].UpdateSelf = FALSE;
+ 206   1              POST_Record[0].PValue = &BUF_Text[0];
+ 207   1              pText = POST_Record[0].PValue;
+ 208   1              pText->CurrValue = postbuf_text0[0];
+ 209   1              pText->UserValue = postbuf_text0[1];
+ 210   1              pText->Offset = 1172;
+ 211   1              pText->DefaultLength = 13;
+ 212   1              pText->CurrValue[0] = '1';
+ 213   1              pText->CurrValue[1] = '9';
+ 214   1              pText->CurrValue[2] = '2';
+ 215   1              pText->CurrValue[3] = '.';
+ 216   1              pText->CurrValue[4] = '1';
+ 217   1              pText->CurrValue[5] = '6';
+ 218   1              pText->CurrValue[6] = '8';
+ 219   1              pText->CurrValue[7] = '.';
+ 220   1              pText->CurrValue[8] = '0';
+ 221   1              pText->CurrValue[9] = '.';
+ 222   1              pText->CurrValue[10] = '8';
+ 223   1              pText->CurrValue[11] = '0';
+ 224   1              pText->CurrValue[12] = '"';
+ 225   1              pText->CurrLength = 13;
+ 226   1      
+ 227   1              /* for record 1 */
+ 228   1              POST_Record[1].Occupy = 1;
+ 229   1              POST_Record[1].PostType = POST_TYPE_TEXT;
+ 230   1              POST_Record[1].Name[0] = 'f';
+ 231   1              POST_Record[1].Name[1] = 'i';
+ 232   1              POST_Record[1].Name[2] = 'l';
+ 233   1              POST_Record[1].Name[3] = 'e';
+ 234   1              POST_Record[1].Name[4] = '_';
+ 235   1              POST_Record[1].Name[5] = 'n';
+ 236   1              POST_Record[1].Name[6] = 'a';
+ 237   1              POST_Record[1].Name[7] = 'm';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 5   
+
+ 238   1              POST_Record[1].Name[8] = 'e';
+ 239   1              POST_Record[1].Name[9] = '_';
+ 240   1              POST_Record[1].Name[10] = 'b';
+ 241   1              POST_Record[1].NameLen = 11;
+ 242   1              POST_Record[1].FileIndex = 2;
+ 243   1              POST_Record[1].UpdateSelf = FALSE;
+ 244   1              POST_Record[1].PValue = &BUF_Text[1];
+ 245   1              pText = POST_Record[1].PValue;
+ 246   1              pText->CurrValue = postbuf_text1[0];
+ 247   1              pText->UserValue = postbuf_text1[1];
+ 248   1              pText->Offset = 1293;
+ 249   1              pText->DefaultLength = 13;
+ 250   1              pText->CurrValue[0] = 'b';
+ 251   1              pText->CurrValue[1] = 'l';
+ 252   1              pText->CurrValue[2] = '_';
+ 253   1              pText->CurrValue[3] = 'd';
+ 254   1              pText->CurrValue[4] = 'o';
+ 255   1              pText->CurrValue[5] = 'c';
+ 256   1              pText->CurrValue[6] = 'd';
+ 257   1              pText->CurrValue[7] = '2';
+ 258   1              pText->CurrValue[8] = '.';
+ 259   1              pText->CurrValue[9] = 'b';
+ 260   1              pText->CurrValue[10] = 'i';
+ 261   1              pText->CurrValue[11] = 'n';
+ 262   1              pText->CurrValue[12] = '"';
+ 263   1              pText->CurrLength = 13;
+ 264   1      
+ 265   1              /* for record 2 */
+ 266   1              POST_Record[2].Occupy = 1;
+ 267   1              POST_Record[2].PostType = POST_TYPE_SUBMIT;
+ 268   1              POST_Record[2].Name[0] = 'A';
+ 269   1              POST_Record[2].Name[1] = 'p';
+ 270   1              POST_Record[2].Name[2] = 'p';
+ 271   1              POST_Record[2].Name[3] = 'l';
+ 272   1              POST_Record[2].Name[4] = 'y';
+ 273   1              POST_Record[2].NameLen = 5;
+ 274   1              POST_Record[2].FileIndex = 0xff;
+ 275   1              POST_Record[2].UpdateSelf = FALSE;
+ 276   1              POST_Record[2].PValue = &BUF_Submit[0];
+ 277   1              pSubmit = POST_Record[2].PValue;
+ 278   1              pSubmit->Value[0] = 'A';
+ 279   1              pSubmit->Value[1] = 'p';
+ 280   1              pSubmit->Value[2] = 'p';
+ 281   1              pSubmit->Value[3] = 'l';
+ 282   1              pSubmit->Value[4] = 'y';
+ 283   1              pSubmit->DefaultVlaueLen = 5;
+ 284   1              pSubmit->IsApply = 1;
+ 285   1      
+ 286   1              /* for record 3 */
+ 287   1              POST_Record[3].Occupy = 1;
+ 288   1              POST_Record[3].PostType = POST_TYPE_SUBMIT;
+ 289   1              POST_Record[3].Name[0] = 'F';
+ 290   1              POST_Record[3].Name[1] = 'w';
+ 291   1              POST_Record[3].Name[2] = 'B';
+ 292   1              POST_Record[3].Name[3] = 'l';
+ 293   1              POST_Record[3].Name[4] = 'd';
+ 294   1              POST_Record[3].Name[5] = 'U';
+ 295   1              POST_Record[3].Name[6] = 'p';
+ 296   1              POST_Record[3].Name[7] = 'g';
+ 297   1              POST_Record[3].NameLen = 8;
+ 298   1              POST_Record[3].FileIndex = 0xff;
+ 299   1              POST_Record[3].UpdateSelf = FALSE;
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 6   
+
+ 300   1              POST_Record[3].PValue = &BUF_Submit[1];
+ 301   1              pSubmit = POST_Record[3].PValue;
+ 302   1              pSubmit->Value[0] = 'U';
+ 303   1              pSubmit->Value[1] = 'p';
+ 304   1              pSubmit->Value[2] = 'g';
+ 305   1              pSubmit->Value[3] = 'r';
+ 306   1              pSubmit->Value[4] = 'a';
+ 307   1              pSubmit->Value[5] = 'd';
+ 308   1              pSubmit->Value[6] = 'e';
+ 309   1              pSubmit->Value[7] = '_';
+ 310   1              pSubmit->Value[8] = 'B';
+ 311   1              pSubmit->Value[9] = 'o';
+ 312   1              pSubmit->Value[10] = 'o';
+ 313   1              pSubmit->Value[11] = 't';
+ 314   1              pSubmit->Value[12] = 'l';
+ 315   1              pSubmit->Value[13] = 'd';
+ 316   1              pSubmit->Value[14] = 'r';
+ 317   1              pSubmit->DefaultVlaueLen = 15;
+ 318   1              pSubmit->IsApply = 1;
+ 319   1      
+ 320   1              /* for record 4 */
+ 321   1              POST_Record[4].Occupy = 1;
+ 322   1              POST_Record[4].PostType = POST_TYPE_TEXT;
+ 323   1              POST_Record[4].Name[0] = 't';
+ 324   1              POST_Record[4].Name[1] = 'f';
+ 325   1              POST_Record[4].Name[2] = 't';
+ 326   1              POST_Record[4].Name[3] = 'p';
+ 327   1              POST_Record[4].Name[4] = 's';
+ 328   1              POST_Record[4].Name[5] = '_';
+ 329   1              POST_Record[4].Name[6] = 'i';
+ 330   1              POST_Record[4].Name[7] = 'p';
+ 331   1              POST_Record[4].NameLen = 8;
+ 332   1              POST_Record[4].FileIndex = 2;
+ 333   1              POST_Record[4].UpdateSelf = FALSE;
+ 334   1              POST_Record[4].PValue = &BUF_Text[2];
+ 335   1              pText = POST_Record[4].PValue;
+ 336   1              pText->CurrValue = postbuf_text2[0];
+ 337   1              pText->UserValue = postbuf_text2[1];
+ 338   1              pText->Offset = 1906;
+ 339   1              pText->DefaultLength = 13;
+ 340   1              pText->CurrValue[0] = '1';
+ 341   1              pText->CurrValue[1] = '9';
+ 342   1              pText->CurrValue[2] = '2';
+ 343   1              pText->CurrValue[3] = '.';
+ 344   1              pText->CurrValue[4] = '1';
+ 345   1              pText->CurrValue[5] = '6';
+ 346   1              pText->CurrValue[6] = '8';
+ 347   1              pText->CurrValue[7] = '.';
+ 348   1              pText->CurrValue[8] = '0';
+ 349   1              pText->CurrValue[9] = '.';
+ 350   1              pText->CurrValue[10] = '8';
+ 351   1              pText->CurrValue[11] = '0';
+ 352   1              pText->CurrValue[12] = '"';
+ 353   1              pText->CurrLength = 13;
+ 354   1      
+ 355   1              /* for record 5 */
+ 356   1              POST_Record[5].Occupy = 1;
+ 357   1              POST_Record[5].PostType = POST_TYPE_TEXT;
+ 358   1              POST_Record[5].Name[0] = 'f';
+ 359   1              POST_Record[5].Name[1] = 'i';
+ 360   1              POST_Record[5].Name[2] = 'l';
+ 361   1              POST_Record[5].Name[3] = 'e';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 7   
+
+ 362   1              POST_Record[5].Name[4] = '_';
+ 363   1              POST_Record[5].Name[5] = 'n';
+ 364   1              POST_Record[5].Name[6] = 'a';
+ 365   1              POST_Record[5].Name[7] = 'm';
+ 366   1              POST_Record[5].Name[8] = 'e';
+ 367   1              POST_Record[5].NameLen = 9;
+ 368   1              POST_Record[5].FileIndex = 2;
+ 369   1              POST_Record[5].UpdateSelf = FALSE;
+ 370   1              POST_Record[5].PValue = &BUF_Text[3];
+ 371   1              pText = POST_Record[5].PValue;
+ 372   1              pText->CurrValue = postbuf_text3[0];
+ 373   1              pText->UserValue = postbuf_text3[1];
+ 374   1              pText->Offset = 2025;
+ 375   1              pText->DefaultLength = 8;
+ 376   1              pText->CurrValue[0] = 'r';
+ 377   1              pText->CurrValue[1] = '2';
+ 378   1              pText->CurrValue[2] = 'w';
+ 379   1              pText->CurrValue[3] = '.';
+ 380   1              pText->CurrValue[4] = 'b';
+ 381   1              pText->CurrValue[5] = 'i';
+ 382   1              pText->CurrValue[6] = 'n';
+ 383   1              pText->CurrValue[7] = '"';
+ 384   1              pText->CurrLength = 8;
+ 385   1      
+ 386   1              /* for record 6 */
+ 387   1              POST_Record[6].Occupy = 1;
+ 388   1              POST_Record[6].PostType = POST_TYPE_SUBMIT;
+ 389   1              POST_Record[6].Name[0] = 'u';
+ 390   1              POST_Record[6].Name[1] = 'p';
+ 391   1              POST_Record[6].Name[2] = 'g';
+ 392   1              POST_Record[6].Name[3] = 'r';
+ 393   1              POST_Record[6].Name[4] = 'a';
+ 394   1              POST_Record[6].Name[5] = 'd';
+ 395   1              POST_Record[6].Name[6] = 'e';
+ 396   1              POST_Record[6].NameLen = 7;
+ 397   1              POST_Record[6].FileIndex = 0xff;
+ 398   1              POST_Record[6].UpdateSelf = FALSE;
+ 399   1              POST_Record[6].PValue = &BUF_Submit[2];
+ 400   1              pSubmit = POST_Record[6].PValue;
+ 401   1              pSubmit->Value[0] = 'U';
+ 402   1              pSubmit->Value[1] = 'p';
+ 403   1              pSubmit->Value[2] = 'g';
+ 404   1              pSubmit->Value[3] = 'r';
+ 405   1              pSubmit->Value[4] = 'a';
+ 406   1              pSubmit->Value[5] = 'd';
+ 407   1              pSubmit->Value[6] = 'e';
+ 408   1              pSubmit->Value[7] = '_';
+ 409   1              pSubmit->Value[8] = 'M';
+ 410   1              pSubmit->Value[9] = 'C';
+ 411   1              pSubmit->Value[10] = 'P';
+ 412   1              pSubmit->Value[11] = 'U';
+ 413   1              pSubmit->DefaultVlaueLen = 12;
+ 414   1              pSubmit->IsApply = 1;
+ 415   1      
+ 416   1              /* for record 7 */
+ 417   1              POST_Record[7].Occupy = 1;
+ 418   1              POST_Record[7].PostType = POST_TYPE_TEXT;
+ 419   1              POST_Record[7].Name[0] = 't';
+ 420   1              POST_Record[7].Name[1] = 'f';
+ 421   1              POST_Record[7].Name[2] = 't';
+ 422   1              POST_Record[7].Name[3] = 'p';
+ 423   1              POST_Record[7].Name[4] = 's';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 8   
+
+ 424   1              POST_Record[7].Name[5] = '_';
+ 425   1              POST_Record[7].Name[6] = 'i';
+ 426   1              POST_Record[7].Name[7] = 'p';
+ 427   1              POST_Record[7].Name[8] = '_';
+ 428   1              POST_Record[7].Name[9] = 'w';
+ 429   1              POST_Record[7].NameLen = 10;
+ 430   1              POST_Record[7].FileIndex = 2;
+ 431   1              POST_Record[7].UpdateSelf = FALSE;
+ 432   1              POST_Record[7].PValue = &BUF_Text[4];
+ 433   1              pText = POST_Record[7].PValue;
+ 434   1              pText->CurrValue = postbuf_text4[0];
+ 435   1              pText->UserValue = postbuf_text4[1];
+ 436   1              pText->Offset = 2631;
+ 437   1              pText->DefaultLength = 13;
+ 438   1              pText->CurrValue[0] = '1';
+ 439   1              pText->CurrValue[1] = '9';
+ 440   1              pText->CurrValue[2] = '2';
+ 441   1              pText->CurrValue[3] = '.';
+ 442   1              pText->CurrValue[4] = '1';
+ 443   1              pText->CurrValue[5] = '6';
+ 444   1              pText->CurrValue[6] = '8';
+ 445   1              pText->CurrValue[7] = '.';
+ 446   1              pText->CurrValue[8] = '0';
+ 447   1              pText->CurrValue[9] = '.';
+ 448   1              pText->CurrValue[10] = '8';
+ 449   1              pText->CurrValue[11] = '0';
+ 450   1              pText->CurrValue[12] = '"';
+ 451   1              pText->CurrLength = 13;
+ 452   1      
+ 453   1              /* for record 8 */
+ 454   1              POST_Record[8].Occupy = 1;
+ 455   1              POST_Record[8].PostType = POST_TYPE_TEXT;
+ 456   1              POST_Record[8].Name[0] = 'f';
+ 457   1              POST_Record[8].Name[1] = 'i';
+ 458   1              POST_Record[8].Name[2] = 'l';
+ 459   1              POST_Record[8].Name[3] = 'e';
+ 460   1              POST_Record[8].Name[4] = '_';
+ 461   1              POST_Record[8].Name[5] = 'n';
+ 462   1              POST_Record[8].Name[6] = 'a';
+ 463   1              POST_Record[8].Name[7] = 'm';
+ 464   1              POST_Record[8].Name[8] = 'e';
+ 465   1              POST_Record[8].Name[9] = '_';
+ 466   1              POST_Record[8].Name[10] = 'w';
+ 467   1              POST_Record[8].NameLen = 11;
+ 468   1              POST_Record[8].FileIndex = 2;
+ 469   1              POST_Record[8].UpdateSelf = FALSE;
+ 470   1              POST_Record[8].PValue = &BUF_Text[5];
+ 471   1              pText = POST_Record[8].PValue;
+ 472   1              pText->CurrValue = postbuf_text5[0];
+ 473   1              pText->UserValue = postbuf_text5[1];
+ 474   1              pText->Offset = 2752;
+ 475   1              pText->DefaultLength = 9;
+ 476   1              pText->CurrValue[0] = 'W';
+ 477   1              pText->CurrValue[1] = 'C';
+ 478   1              pText->CurrValue[2] = 'P';
+ 479   1              pText->CurrValue[3] = 'U';
+ 480   1              pText->CurrValue[4] = '.';
+ 481   1              pText->CurrValue[5] = 'b';
+ 482   1              pText->CurrValue[6] = 'i';
+ 483   1              pText->CurrValue[7] = 'n';
+ 484   1              pText->CurrValue[8] = '"';
+ 485   1              pText->CurrLength = 9;
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 9   
+
+ 486   1      
+ 487   1              /* for record 9 */
+ 488   1              POST_Record[9].Occupy = 1;
+ 489   1              POST_Record[9].PostType = POST_TYPE_SUBMIT;
+ 490   1              POST_Record[9].Name[0] = 'F';
+ 491   1              POST_Record[9].Name[1] = 'w';
+ 492   1              POST_Record[9].Name[2] = 'W';
+ 493   1              POST_Record[9].Name[3] = 'U';
+ 494   1              POST_Record[9].Name[4] = 'p';
+ 495   1              POST_Record[9].Name[5] = 'g';
+ 496   1              POST_Record[9].NameLen = 6;
+ 497   1              POST_Record[9].FileIndex = 0xff;
+ 498   1              POST_Record[9].UpdateSelf = FALSE;
+ 499   1              POST_Record[9].PValue = &BUF_Submit[3];
+ 500   1              pSubmit = POST_Record[9].PValue;
+ 501   1              pSubmit->Value[0] = 'U';
+ 502   1              pSubmit->Value[1] = 'p';
+ 503   1              pSubmit->Value[2] = 'g';
+ 504   1              pSubmit->Value[3] = 'r';
+ 505   1              pSubmit->Value[4] = 'a';
+ 506   1              pSubmit->Value[5] = 'd';
+ 507   1              pSubmit->Value[6] = 'e';
+ 508   1              pSubmit->Value[7] = '_';
+ 509   1              pSubmit->Value[8] = 'W';
+ 510   1              pSubmit->Value[9] = 'C';
+ 511   1              pSubmit->Value[10] = 'P';
+ 512   1              pSubmit->Value[11] = 'U';
+ 513   1              pSubmit->DefaultVlaueLen = 12;
+ 514   1              pSubmit->IsApply = 1;
+ 515   1      
+ 516   1              /* for record 10 */
+ 517   1              POST_Record[10].Occupy = 1;
+ 518   1              POST_Record[10].PostType = POST_TYPE_RADIO;
+ 519   1              POST_Record[10].Name[0] = 'd';
+ 520   1              POST_Record[10].Name[1] = 'h';
+ 521   1              POST_Record[10].Name[2] = 'c';
+ 522   1              POST_Record[10].Name[3] = 'p';
+ 523   1              POST_Record[10].Name[4] = 's';
+ 524   1              POST_Record[10].Name[5] = '_';
+ 525   1              POST_Record[10].Name[6] = 'o';
+ 526   1              POST_Record[10].Name[7] = 'n';
+ 527   1              POST_Record[10].Name[8] = 'o';
+ 528   1              POST_Record[10].Name[9] = 'f';
+ 529   1              POST_Record[10].Name[10] = 'f';
+ 530   1              POST_Record[10].NameLen = 11;
+ 531   1              POST_Record[10].FileIndex = 2;
+ 532   1              POST_Record[10].UpdateSelf = FALSE;
+ 533   1              POST_Record[10].PValue = &BUF_Radio[0];
+ 534   1              pRadio = POST_Record[10].PValue;
+ 535   1              pRadio->Offset[0] = 3379;
+ 536   1              pRadio->Value[0][0] = '0';
+ 537   1              pRadio->Length[0] = 1;
+ 538   1              pRadio->Offset[1] = 3457;
+ 539   1              pRadio->Value[1][0] = '1';
+ 540   1              pRadio->Length[1] = 1;
+ 541   1              pRadio->Count = 2;
+ 542   1              pRadio->DefaultSet = 1;
+ 543   1              pRadio->CurrentSet = 1;
+ 544   1              pRadio->UserSet = 1;
+ 545   1      
+ 546   1              /* for record 11 */
+ 547   1              POST_Record[11].Occupy = 1;
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 10  
+
+ 548   1              POST_Record[11].PostType = POST_TYPE_TEXT;
+ 549   1              POST_Record[11].Name[0] = 'd';
+ 550   1              POST_Record[11].Name[1] = 'h';
+ 551   1              POST_Record[11].Name[2] = 'c';
+ 552   1              POST_Record[11].Name[3] = 'p';
+ 553   1              POST_Record[11].Name[4] = 's';
+ 554   1              POST_Record[11].Name[5] = '_';
+ 555   1              POST_Record[11].Name[6] = 's';
+ 556   1              POST_Record[11].Name[7] = 't';
+ 557   1              POST_Record[11].Name[8] = 'a';
+ 558   1              POST_Record[11].Name[9] = 'r';
+ 559   1              POST_Record[11].Name[10] = 't';
+ 560   1              POST_Record[11].Name[11] = 'i';
+ 561   1              POST_Record[11].Name[12] = 'p';
+ 562   1              POST_Record[11].NameLen = 13;
+ 563   1              POST_Record[11].FileIndex = 2;
+ 564   1              POST_Record[11].UpdateSelf = FALSE;
+ 565   1              POST_Record[11].PValue = &BUF_Text[6];
+ 566   1              pText = POST_Record[11].PValue;
+ 567   1              pText->CurrValue = postbuf_text6[0];
+ 568   1              pText->UserValue = postbuf_text6[1];
+ 569   1              pText->Offset = 3580;
+ 570   1              pText->DefaultLength = 12;
+ 571   1              pText->CurrValue[0] = '1';
+ 572   1              pText->CurrValue[1] = '9';
+ 573   1              pText->CurrValue[2] = '2';
+ 574   1              pText->CurrValue[3] = '.';
+ 575   1              pText->CurrValue[4] = '1';
+ 576   1              pText->CurrValue[5] = '6';
+ 577   1              pText->CurrValue[6] = '8';
+ 578   1              pText->CurrValue[7] = '.';
+ 579   1              pText->CurrValue[8] = '0';
+ 580   1              pText->CurrValue[9] = '.';
+ 581   1              pText->CurrValue[10] = '2';
+ 582   1              pText->CurrValue[11] = '"';
+ 583   1              pText->CurrLength = 12;
+ 584   1      
+ 585   1              /* for record 12 */
+ 586   1              POST_Record[12].Occupy = 1;
+ 587   1              POST_Record[12].PostType = POST_TYPE_TEXT;
+ 588   1              POST_Record[12].Name[0] = 'd';
+ 589   1              POST_Record[12].Name[1] = 'h';
+ 590   1              POST_Record[12].Name[2] = 'c';
+ 591   1              POST_Record[12].Name[3] = 'p';
+ 592   1              POST_Record[12].Name[4] = 's';
+ 593   1              POST_Record[12].Name[5] = '_';
+ 594   1              POST_Record[12].Name[6] = 'e';
+ 595   1              POST_Record[12].Name[7] = 'n';
+ 596   1              POST_Record[12].Name[8] = 'd';
+ 597   1              POST_Record[12].Name[9] = 'i';
+ 598   1              POST_Record[12].Name[10] = 'p';
+ 599   1              POST_Record[12].NameLen = 11;
+ 600   1              POST_Record[12].FileIndex = 2;
+ 601   1              POST_Record[12].UpdateSelf = FALSE;
+ 602   1              POST_Record[12].PValue = &BUF_Text[7];
+ 603   1              pText = POST_Record[12].PValue;
+ 604   1              pText->CurrValue = postbuf_text7[0];
+ 605   1              pText->UserValue = postbuf_text7[1];
+ 606   1              pText->Offset = 3713;
+ 607   1              pText->DefaultLength = 14;
+ 608   1              pText->CurrValue[0] = '1';
+ 609   1              pText->CurrValue[1] = '9';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 11  
+
+ 610   1              pText->CurrValue[2] = '2';
+ 611   1              pText->CurrValue[3] = '.';
+ 612   1              pText->CurrValue[4] = '1';
+ 613   1              pText->CurrValue[5] = '6';
+ 614   1              pText->CurrValue[6] = '8';
+ 615   1              pText->CurrValue[7] = '.';
+ 616   1              pText->CurrValue[8] = '0';
+ 617   1              pText->CurrValue[9] = '.';
+ 618   1              pText->CurrValue[10] = '2';
+ 619   1              pText->CurrValue[11] = '5';
+ 620   1              pText->CurrValue[12] = '4';
+ 621   1              pText->CurrValue[13] = '"';
+ 622   1              pText->CurrLength = 14;
+ 623   1      
+ 624   1              /* for record 13 */
+ 625   1              POST_Record[13].Occupy = 1;
+ 626   1              POST_Record[13].PostType = POST_TYPE_TEXT;
+ 627   1              POST_Record[13].Name[0] = 'd';
+ 628   1              POST_Record[13].Name[1] = 'h';
+ 629   1              POST_Record[13].Name[2] = 'c';
+ 630   1              POST_Record[13].Name[3] = 'p';
+ 631   1              POST_Record[13].Name[4] = 's';
+ 632   1              POST_Record[13].Name[5] = '_';
+ 633   1              POST_Record[13].Name[6] = 'g';
+ 634   1              POST_Record[13].Name[7] = 'a';
+ 635   1              POST_Record[13].Name[8] = 't';
+ 636   1              POST_Record[13].Name[9] = 'e';
+ 637   1              POST_Record[13].Name[10] = 'w';
+ 638   1              POST_Record[13].Name[11] = 'a';
+ 639   1              POST_Record[13].Name[12] = 'y';
+ 640   1              POST_Record[13].NameLen = 13;
+ 641   1              POST_Record[13].FileIndex = 2;
+ 642   1              POST_Record[13].UpdateSelf = FALSE;
+ 643   1              POST_Record[13].PValue = &BUF_Text[8];
+ 644   1              pText = POST_Record[13].PValue;
+ 645   1              pText->CurrValue = postbuf_text8[0];
+ 646   1              pText->UserValue = postbuf_text8[1];
+ 647   1              pText->Offset = 3843;
+ 648   1              pText->DefaultLength = 12;
+ 649   1              pText->CurrValue[0] = '1';
+ 650   1              pText->CurrValue[1] = '9';
+ 651   1              pText->CurrValue[2] = '2';
+ 652   1              pText->CurrValue[3] = '.';
+ 653   1              pText->CurrValue[4] = '1';
+ 654   1              pText->CurrValue[5] = '6';
+ 655   1              pText->CurrValue[6] = '8';
+ 656   1              pText->CurrValue[7] = '.';
+ 657   1              pText->CurrValue[8] = '0';
+ 658   1              pText->CurrValue[9] = '.';
+ 659   1              pText->CurrValue[10] = '1';
+ 660   1              pText->CurrValue[11] = '"';
+ 661   1              pText->CurrLength = 12;
+ 662   1      
+ 663   1              /* for record 14 */
+ 664   1              POST_Record[14].Occupy = 1;
+ 665   1              POST_Record[14].PostType = POST_TYPE_TEXT;
+ 666   1              POST_Record[14].Name[0] = 'd';
+ 667   1              POST_Record[14].Name[1] = 'h';
+ 668   1              POST_Record[14].Name[2] = 'c';
+ 669   1              POST_Record[14].Name[3] = 'p';
+ 670   1              POST_Record[14].Name[4] = 's';
+ 671   1              POST_Record[14].Name[5] = '_';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 12  
+
+ 672   1              POST_Record[14].Name[6] = 'm';
+ 673   1              POST_Record[14].Name[7] = 'a';
+ 674   1              POST_Record[14].Name[8] = 's';
+ 675   1              POST_Record[14].Name[9] = 'k';
+ 676   1              POST_Record[14].NameLen = 10;
+ 677   1              POST_Record[14].FileIndex = 2;
+ 678   1              POST_Record[14].UpdateSelf = FALSE;
+ 679   1              POST_Record[14].PValue = &BUF_Text[9];
+ 680   1              pText = POST_Record[14].PValue;
+ 681   1              pText->CurrValue = postbuf_text9[0];
+ 682   1              pText->UserValue = postbuf_text9[1];
+ 683   1              pText->Offset = 3964;
+ 684   1              pText->DefaultLength = 14;
+ 685   1              pText->CurrValue[0] = '2';
+ 686   1              pText->CurrValue[1] = '5';
+ 687   1              pText->CurrValue[2] = '5';
+ 688   1              pText->CurrValue[3] = '.';
+ 689   1              pText->CurrValue[4] = '2';
+ 690   1              pText->CurrValue[5] = '5';
+ 691   1              pText->CurrValue[6] = '5';
+ 692   1              pText->CurrValue[7] = '.';
+ 693   1              pText->CurrValue[8] = '2';
+ 694   1              pText->CurrValue[9] = '5';
+ 695   1              pText->CurrValue[10] = '5';
+ 696   1              pText->CurrValue[11] = '.';
+ 697   1              pText->CurrValue[12] = '0';
+ 698   1              pText->CurrValue[13] = '"';
+ 699   1              pText->CurrLength = 14;
+ 700   1      
+ 701   1              /* for record 15 */
+ 702   1              POST_Record[15].Occupy = 1;
+ 703   1              POST_Record[15].PostType = POST_TYPE_TEXT;
+ 704   1              POST_Record[15].Name[0] = 'd';
+ 705   1              POST_Record[15].Name[1] = 's';
+ 706   1              POST_Record[15].Name[2] = 'm';
+ 707   1              POST_Record[15].Name[3] = '_';
+ 708   1              POST_Record[15].Name[4] = 'n';
+ 709   1              POST_Record[15].Name[5] = 'a';
+ 710   1              POST_Record[15].Name[6] = 'm';
+ 711   1              POST_Record[15].Name[7] = 'e';
+ 712   1              POST_Record[15].NameLen = 8;
+ 713   1              POST_Record[15].FileIndex = 6;
+ 714   1              POST_Record[15].UpdateSelf = FALSE;
+ 715   1              POST_Record[15].PValue = &BUF_Text[10];
+ 716   1              pText = POST_Record[15].PValue;
+ 717   1              pText->CurrValue = postbuf_text10[0];
+ 718   1              pText->UserValue = postbuf_text10[1];
+ 719   1              pText->Offset = 1151;
+ 720   1              pText->DefaultLength = 5;
+ 721   1              pText->CurrValue[0] = 'D';
+ 722   1              pText->CurrValue[1] = 'S';
+ 723   1              pText->CurrValue[2] = 'M';
+ 724   1              pText->CurrValue[3] = '1';
+ 725   1              pText->CurrValue[4] = '"';
+ 726   1              pText->CurrLength = 5;
+ 727   1      
+ 728   1              /* for record 16 */
+ 729   1              POST_Record[16].Occupy = 1;
+ 730   1              POST_Record[16].PostType = POST_TYPE_SELECT;
+ 731   1              POST_Record[16].Name[0] = 'd';
+ 732   1              POST_Record[16].Name[1] = 'b';
+ 733   1              POST_Record[16].Name[2] = 'r';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 13  
+
+ 734   1              POST_Record[16].NameLen = 3;
+ 735   1              POST_Record[16].FileIndex = 6;
+ 736   1              POST_Record[16].UpdateSelf = FALSE;
+ 737   1              POST_Record[16].PValue = &BUF_Select[0];
+ 738   1              pSelect = POST_Record[16].PValue;
+ 739   1              pSelect->Offset[0] = 1358;
+ 740   1              pSelect->Offset[1] = 1412;
+ 741   1              pSelect->Offset[2] = 1457;
+ 742   1              pSelect->Offset[3] = 1501;
+ 743   1              pSelect->Offset[4] = 1545;
+ 744   1              pSelect->Offset[5] = 1589;
+ 745   1              pSelect->Offset[6] = 1632;
+ 746   1              pSelect->Offset[7] = 1675;
+ 747   1              pSelect->Offset[8] = 1718;
+ 748   1              pSelect->Count = 9;
+ 749   1              pSelect->DefaultSet = 0;
+ 750   1              pSelect->CurrentSet = 0;
+ 751   1              pSelect->UserSet = 0;
+ 752   1      
+ 753   1              /* for record 17 */
+ 754   1              POST_Record[17].Occupy = 1;
+ 755   1              POST_Record[17].PostType = POST_TYPE_SELECT;
+ 756   1              POST_Record[17].Name[0] = 'd';
+ 757   1              POST_Record[17].Name[1] = 'a';
+ 758   1              POST_Record[17].Name[2] = 't';
+ 759   1              POST_Record[17].Name[3] = 'a';
+ 760   1              POST_Record[17].NameLen = 4;
+ 761   1              POST_Record[17].FileIndex = 6;
+ 762   1              POST_Record[17].UpdateSelf = FALSE;
+ 763   1              POST_Record[17].PValue = &BUF_Select[1];
+ 764   1              pSelect = POST_Record[17].PValue;
+ 765   1              pSelect->Offset[0] = 1830;
+ 766   1              pSelect->Offset[1] = 1879;
+ 767   1              pSelect->Offset[2] = 1919;
+ 768   1              pSelect->Offset[3] = 1959;
+ 769   1              pSelect->Count = 4;
+ 770   1              pSelect->DefaultSet = 0;
+ 771   1              pSelect->CurrentSet = 0;
+ 772   1              pSelect->UserSet = 0;
+ 773   1      
+ 774   1              /* for record 18 */
+ 775   1              POST_Record[18].Occupy = 1;
+ 776   1              POST_Record[18].PostType = POST_TYPE_SELECT;
+ 777   1              POST_Record[18].Name[0] = 'p';
+ 778   1              POST_Record[18].Name[1] = 'a';
+ 779   1              POST_Record[18].Name[2] = 'r';
+ 780   1              POST_Record[18].Name[3] = 'i';
+ 781   1              POST_Record[18].Name[4] = 't';
+ 782   1              POST_Record[18].Name[5] = 'y';
+ 783   1              POST_Record[18].NameLen = 6;
+ 784   1              POST_Record[18].FileIndex = 6;
+ 785   1              POST_Record[18].UpdateSelf = FALSE;
+ 786   1              POST_Record[18].PValue = &BUF_Select[2];
+ 787   1              pSelect = POST_Record[18].PValue;
+ 788   1              pSelect->Offset[0] = 2072;
+ 789   1              pSelect->Offset[1] = 2123;
+ 790   1              pSelect->Offset[2] = 2166;
+ 791   1              pSelect->Count = 3;
+ 792   1              pSelect->DefaultSet = 0;
+ 793   1              pSelect->CurrentSet = 0;
+ 794   1              pSelect->UserSet = 0;
+ 795   1      
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 14  
+
+ 796   1              /* for record 19 */
+ 797   1              POST_Record[19].Occupy = 1;
+ 798   1              POST_Record[19].PostType = POST_TYPE_SELECT;
+ 799   1              POST_Record[19].Name[0] = 's';
+ 800   1              POST_Record[19].Name[1] = 't';
+ 801   1              POST_Record[19].Name[2] = 'o';
+ 802   1              POST_Record[19].Name[3] = 'p';
+ 803   1              POST_Record[19].NameLen = 4;
+ 804   1              POST_Record[19].FileIndex = 6;
+ 805   1              POST_Record[19].UpdateSelf = FALSE;
+ 806   1              POST_Record[19].PValue = &BUF_Select[3];
+ 807   1              pSelect = POST_Record[19].PValue;
+ 808   1              pSelect->Offset[0] = 2278;
+ 809   1              pSelect->Offset[1] = 2327;
+ 810   1              pSelect->Offset[2] = 2369;
+ 811   1              pSelect->Count = 3;
+ 812   1              pSelect->DefaultSet = 0;
+ 813   1              pSelect->CurrentSet = 0;
+ 814   1              pSelect->UserSet = 0;
+ 815   1      
+ 816   1              /* for record 20 */
+ 817   1              POST_Record[20].Occupy = 1;
+ 818   1              POST_Record[20].PostType = POST_TYPE_SELECT;
+ 819   1              POST_Record[20].Name[0] = 'f';
+ 820   1              POST_Record[20].Name[1] = 'l';
+ 821   1              POST_Record[20].Name[2] = 'o';
+ 822   1              POST_Record[20].Name[3] = 'w';
+ 823   1              POST_Record[20].NameLen = 4;
+ 824   1              POST_Record[20].FileIndex = 6;
+ 825   1              POST_Record[20].UpdateSelf = FALSE;
+ 826   1              POST_Record[20].PValue = &BUF_Select[4];
+ 827   1              pSelect = POST_Record[20].PValue;
+ 828   1              pSelect->Offset[0] = 2481;
+ 829   1              pSelect->Offset[1] = 2537;
+ 830   1              pSelect->Offset[2] = 2584;
+ 831   1              pSelect->Count = 3;
+ 832   1              pSelect->DefaultSet = 0;
+ 833   1              pSelect->CurrentSet = 0;
+ 834   1              pSelect->UserSet = 0;
+ 835   1      
+ 836   1              /* for record 21 */
+ 837   1              POST_Record[21].Occupy = 1;
+ 838   1              POST_Record[21].PostType = POST_TYPE_SELECT;
+ 839   1              POST_Record[21].Name[0] = 'r';
+ 840   1              POST_Record[21].Name[1] = 's';
+ 841   1              POST_Record[21].Name[2] = '4';
+ 842   1              POST_Record[21].Name[3] = '8';
+ 843   1              POST_Record[21].Name[4] = '5';
+ 844   1              POST_Record[21].NameLen = 5;
+ 845   1              POST_Record[21].FileIndex = 6;
+ 846   1              POST_Record[21].UpdateSelf = FALSE;
+ 847   1              POST_Record[21].PValue = &BUF_Select[5];
+ 848   1              pSelect = POST_Record[21].PValue;
+ 849   1              pSelect->Offset[0] = 2713;
+ 850   1              pSelect->Offset[1] = 2766;
+ 851   1              pSelect->Offset[2] = 2827;
+ 852   1              pSelect->Offset[3] = 2896;
+ 853   1              pSelect->Count = 4;
+ 854   1              pSelect->DefaultSet = 0;
+ 855   1              pSelect->CurrentSet = 0;
+ 856   1              pSelect->UserSet = 0;
+ 857   1      
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 15  
+
+ 858   1              /* for record 22 */
+ 859   1              POST_Record[22].Occupy = 1;
+ 860   1              POST_Record[22].PostType = POST_TYPE_SELECT;
+ 861   1              POST_Record[22].Name[0] = 'd';
+ 862   1              POST_Record[22].Name[1] = 'h';
+ 863   1              POST_Record[22].Name[2] = 'c';
+ 864   1              POST_Record[22].Name[3] = 'p';
+ 865   1              POST_Record[22].NameLen = 4;
+ 866   1              POST_Record[22].FileIndex = 6;
+ 867   1              POST_Record[22].UpdateSelf = FALSE;
+ 868   1              POST_Record[22].PValue = &BUF_Select[6];
+ 869   1              pSelect = POST_Record[22].PValue;
+ 870   1              pSelect->Offset[0] = 3084;
+ 871   1              pSelect->Offset[1] = 3139;
+ 872   1              pSelect->Count = 2;
+ 873   1              pSelect->DefaultSet = 0;
+ 874   1              pSelect->CurrentSet = 0;
+ 875   1              pSelect->UserSet = 0;
+ 876   1      
+ 877   1              /* for record 23 */
+ 878   1              POST_Record[23].Occupy = 1;
+ 879   1              POST_Record[23].PostType = POST_TYPE_TEXT;
+ 880   1              POST_Record[23].Name[0] = 's';
+ 881   1              POST_Record[23].Name[1] = 't';
+ 882   1              POST_Record[23].Name[2] = 'a';
+ 883   1              POST_Record[23].Name[3] = 't';
+ 884   1              POST_Record[23].Name[4] = 'i';
+ 885   1              POST_Record[23].Name[5] = 'c';
+ 886   1              POST_Record[23].Name[6] = '_';
+ 887   1              POST_Record[23].Name[7] = 'i';
+ 888   1              POST_Record[23].Name[8] = 'p';
+ 889   1              POST_Record[23].NameLen = 9;
+ 890   1              POST_Record[23].FileIndex = 6;
+ 891   1              POST_Record[23].UpdateSelf = FALSE;
+ 892   1              POST_Record[23].PValue = &BUF_Text[11];
+ 893   1              pText = POST_Record[23].PValue;
+ 894   1              pText->CurrValue = postbuf_text11[0];
+ 895   1              pText->UserValue = postbuf_text11[1];
+ 896   1              pText->Offset = 3262;
+ 897   1              pText->DefaultLength = 12;
+ 898   1              pText->CurrValue[0] = '1';
+ 899   1              pText->CurrValue[1] = '9';
+ 900   1              pText->CurrValue[2] = '2';
+ 901   1              pText->CurrValue[3] = '.';
+ 902   1              pText->CurrValue[4] = '1';
+ 903   1              pText->CurrValue[5] = '6';
+ 904   1              pText->CurrValue[6] = '8';
+ 905   1              pText->CurrValue[7] = '.';
+ 906   1              pText->CurrValue[8] = '0';
+ 907   1              pText->CurrValue[9] = '.';
+ 908   1              pText->CurrValue[10] = '3';
+ 909   1              pText->CurrValue[11] = '"';
+ 910   1              pText->CurrLength = 12;
+ 911   1      
+ 912   1              /* for record 24 */
+ 913   1              POST_Record[24].Occupy = 1;
+ 914   1              POST_Record[24].PostType = POST_TYPE_TEXT;
+ 915   1              POST_Record[24].Name[0] = 'm';
+ 916   1              POST_Record[24].Name[1] = 'a';
+ 917   1              POST_Record[24].Name[2] = 's';
+ 918   1              POST_Record[24].Name[3] = 'k';
+ 919   1              POST_Record[24].NameLen = 4;
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 16  
+
+ 920   1              POST_Record[24].FileIndex = 6;
+ 921   1              POST_Record[24].UpdateSelf = FALSE;
+ 922   1              POST_Record[24].PValue = &BUF_Text[12];
+ 923   1              pText = POST_Record[24].PValue;
+ 924   1              pText->CurrValue = postbuf_text12[0];
+ 925   1              pText->UserValue = postbuf_text12[1];
+ 926   1              pText->Offset = 3384;
+ 927   1              pText->DefaultLength = 14;
+ 928   1              pText->CurrValue[0] = '2';
+ 929   1              pText->CurrValue[1] = '5';
+ 930   1              pText->CurrValue[2] = '5';
+ 931   1              pText->CurrValue[3] = '.';
+ 932   1              pText->CurrValue[4] = '2';
+ 933   1              pText->CurrValue[5] = '5';
+ 934   1              pText->CurrValue[6] = '5';
+ 935   1              pText->CurrValue[7] = '.';
+ 936   1              pText->CurrValue[8] = '2';
+ 937   1              pText->CurrValue[9] = '5';
+ 938   1              pText->CurrValue[10] = '5';
+ 939   1              pText->CurrValue[11] = '.';
+ 940   1              pText->CurrValue[12] = '0';
+ 941   1              pText->CurrValue[13] = '"';
+ 942   1              pText->CurrLength = 14;
+ 943   1      
+ 944   1              /* for record 25 */
+ 945   1              POST_Record[25].Occupy = 1;
+ 946   1              POST_Record[25].PostType = POST_TYPE_TEXT;
+ 947   1              POST_Record[25].Name[0] = 'g';
+ 948   1              POST_Record[25].Name[1] = 'a';
+ 949   1              POST_Record[25].Name[2] = 't';
+ 950   1              POST_Record[25].Name[3] = 'e';
+ 951   1              POST_Record[25].Name[4] = 'w';
+ 952   1              POST_Record[25].Name[5] = 'a';
+ 953   1              POST_Record[25].Name[6] = 'y';
+ 954   1              POST_Record[25].Name[7] = '_';
+ 955   1              POST_Record[25].Name[8] = 'i';
+ 956   1              POST_Record[25].Name[9] = 'p';
+ 957   1              POST_Record[25].NameLen = 10;
+ 958   1              POST_Record[25].FileIndex = 6;
+ 959   1              POST_Record[25].UpdateSelf = FALSE;
+ 960   1              POST_Record[25].PValue = &BUF_Text[13];
+ 961   1              pText = POST_Record[25].PValue;
+ 962   1              pText->CurrValue = postbuf_text13[0];
+ 963   1              pText->UserValue = postbuf_text13[1];
+ 964   1              pText->Offset = 3518;
+ 965   1              pText->DefaultLength = 12;
+ 966   1              pText->CurrValue[0] = '1';
+ 967   1              pText->CurrValue[1] = '9';
+ 968   1              pText->CurrValue[2] = '2';
+ 969   1              pText->CurrValue[3] = '.';
+ 970   1              pText->CurrValue[4] = '1';
+ 971   1              pText->CurrValue[5] = '6';
+ 972   1              pText->CurrValue[6] = '8';
+ 973   1              pText->CurrValue[7] = '.';
+ 974   1              pText->CurrValue[8] = '0';
+ 975   1              pText->CurrValue[9] = '.';
+ 976   1              pText->CurrValue[10] = '1';
+ 977   1              pText->CurrValue[11] = '"';
+ 978   1              pText->CurrLength = 12;
+ 979   1      
+ 980   1              /* for record 26 */
+ 981   1              POST_Record[26].Occupy = 1;
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 17  
+
+ 982   1              POST_Record[26].PostType = POST_TYPE_TEXT;
+ 983   1              POST_Record[26].Name[0] = 'd';
+ 984   1              POST_Record[26].Name[1] = 'n';
+ 985   1              POST_Record[26].Name[2] = 's';
+ 986   1              POST_Record[26].Name[3] = '_';
+ 987   1              POST_Record[26].Name[4] = 'i';
+ 988   1              POST_Record[26].Name[5] = 'p';
+ 989   1              POST_Record[26].NameLen = 6;
+ 990   1              POST_Record[26].FileIndex = 6;
+ 991   1              POST_Record[26].UpdateSelf = FALSE;
+ 992   1              POST_Record[26].PValue = &BUF_Text[14];
+ 993   1              pText = POST_Record[26].PValue;
+ 994   1              pText->CurrValue = postbuf_text14[0];
+ 995   1              pText->UserValue = postbuf_text14[1];
+ 996   1              pText->Offset = 3641;
+ 997   1              pText->DefaultLength = 11;
+ 998   1              pText->CurrValue[0] = '1';
+ 999   1              pText->CurrValue[1] = '6';
+1000   1              pText->CurrValue[2] = '8';
+1001   1              pText->CurrValue[3] = '.';
+1002   1              pText->CurrValue[4] = '9';
+1003   1              pText->CurrValue[5] = '5';
+1004   1              pText->CurrValue[6] = '.';
+1005   1              pText->CurrValue[7] = '1';
+1006   1              pText->CurrValue[8] = '.';
+1007   1              pText->CurrValue[9] = '1';
+1008   1              pText->CurrValue[10] = '"';
+1009   1              pText->CurrLength = 11;
+1010   1      
+1011   1              /* for record 27 */
+1012   1              POST_Record[27].Occupy = 1;
+1013   1              POST_Record[27].PostType = POST_TYPE_SELECT;
+1014   1              POST_Record[27].Name[0] = 'c';
+1015   1              POST_Record[27].Name[1] = 'o';
+1016   1              POST_Record[27].Name[2] = 'n';
+1017   1              POST_Record[27].Name[3] = 'n';
+1018   1              POST_Record[27].Name[4] = 't';
+1019   1              POST_Record[27].Name[5] = 'y';
+1020   1              POST_Record[27].Name[6] = 'p';
+1021   1              POST_Record[27].Name[7] = 'e';
+1022   1              POST_Record[27].NameLen = 8;
+1023   1              POST_Record[27].FileIndex = 6;
+1024   1              POST_Record[27].UpdateSelf = FALSE;
+1025   1              POST_Record[27].PValue = &BUF_Select[7];
+1026   1              pSelect = POST_Record[27].PValue;
+1027   1              pSelect->Offset[0] = 3767;
+1028   1              pSelect->Offset[1] = 3818;
+1029   1              pSelect->Count = 2;
+1030   1              pSelect->DefaultSet = 0;
+1031   1              pSelect->CurrentSet = 0;
+1032   1              pSelect->UserSet = 0;
+1033   1      
+1034   1              /* for record 28 */
+1035   1              POST_Record[28].Occupy = 1;
+1036   1              POST_Record[28].PostType = POST_TYPE_TEXT;
+1037   1              POST_Record[28].Name[0] = 't';
+1038   1              POST_Record[28].Name[1] = 'x';
+1039   1              POST_Record[28].Name[2] = 't';
+1040   1              POST_Record[28].Name[3] = 'i';
+1041   1              POST_Record[28].Name[4] = 'm';
+1042   1              POST_Record[28].Name[5] = 'e';
+1043   1              POST_Record[28].Name[6] = 'r';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 18  
+
+1044   1              POST_Record[28].NameLen = 7;
+1045   1              POST_Record[28].FileIndex = 6;
+1046   1              POST_Record[28].UpdateSelf = FALSE;
+1047   1              POST_Record[28].PValue = &BUF_Text[15];
+1048   1              pText = POST_Record[28].PValue;
+1049   1              pText->CurrValue = postbuf_text15[0];
+1050   1              pText->UserValue = postbuf_text15[1];
+1051   1              pText->Offset = 3938;
+1052   1              pText->DefaultLength = 4;
+1053   1              pText->CurrValue[0] = '1';
+1054   1              pText->CurrValue[1] = '0';
+1055   1              pText->CurrValue[2] = '0';
+1056   1              pText->CurrValue[3] = '"';
+1057   1              pText->CurrLength = 4;
+1058   1      
+1059   1              /* for record 29 */
+1060   1              POST_Record[29].Occupy = 1;
+1061   1              POST_Record[29].PostType = POST_TYPE_SELECT;
+1062   1              POST_Record[29].Name[0] = 'c';
+1063   1              POST_Record[29].Name[1] = 's';
+1064   1              POST_Record[29].Name[2] = '_';
+1065   1              POST_Record[29].Name[3] = 'm';
+1066   1              POST_Record[29].Name[4] = 'o';
+1067   1              POST_Record[29].Name[5] = 'd';
+1068   1              POST_Record[29].Name[6] = 'e';
+1069   1              POST_Record[29].NameLen = 7;
+1070   1              POST_Record[29].FileIndex = 6;
+1071   1              POST_Record[29].UpdateSelf = FALSE;
+1072   1              POST_Record[29].PValue = &BUF_Select[8];
+1073   1              pSelect = POST_Record[29].PValue;
+1074   1              pSelect->Offset[0] = 4153;
+1075   1              pSelect->Offset[1] = 4207;
+1076   1              pSelect->Count = 2;
+1077   1              pSelect->DefaultSet = 0;
+1078   1              pSelect->CurrentSet = 0;
+1079   1              pSelect->UserSet = 0;
+1080   1      
+1081   1              /* for record 30 */
+1082   1              POST_Record[30].Occupy = 1;
+1083   1              POST_Record[30].PostType = POST_TYPE_TEXT;
+1084   1              POST_Record[30].Name[0] = 's';
+1085   1              POST_Record[30].Name[1] = '_';
+1086   1              POST_Record[30].Name[2] = 'l';
+1087   1              POST_Record[30].Name[3] = 's';
+1088   1              POST_Record[30].Name[4] = 't';
+1089   1              POST_Record[30].Name[5] = 'p';
+1090   1              POST_Record[30].Name[6] = 'o';
+1091   1              POST_Record[30].Name[7] = 'r';
+1092   1              POST_Record[30].Name[8] = 't';
+1093   1              POST_Record[30].NameLen = 9;
+1094   1              POST_Record[30].FileIndex = 6;
+1095   1              POST_Record[30].UpdateSelf = FALSE;
+1096   1              POST_Record[30].PValue = &BUF_Text[16];
+1097   1              pText = POST_Record[30].PValue;
+1098   1              pText->CurrValue = postbuf_text16[0];
+1099   1              pText->UserValue = postbuf_text16[1];
+1100   1              pText->Offset = 4334;
+1101   1              pText->DefaultLength = 5;
+1102   1              pText->CurrValue[0] = '5';
+1103   1              pText->CurrValue[1] = '0';
+1104   1              pText->CurrValue[2] = '0';
+1105   1              pText->CurrValue[3] = '0';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 19  
+
+1106   1              pText->CurrValue[4] = '"';
+1107   1              pText->CurrLength = 5;
+1108   1      
+1109   1              /* for record 31 */
+1110   1              POST_Record[31].Occupy = 1;
+1111   1              POST_Record[31].PostType = POST_TYPE_TEXT;
+1112   1              POST_Record[31].Name[0] = 'c';
+1113   1              POST_Record[31].Name[1] = '_';
+1114   1              POST_Record[31].Name[2] = 'd';
+1115   1              POST_Record[31].Name[3] = 'e';
+1116   1              POST_Record[31].Name[4] = 's';
+1117   1              POST_Record[31].Name[5] = 'h';
+1118   1              POST_Record[31].Name[6] = 'n';
+1119   1              POST_Record[31].NameLen = 7;
+1120   1              POST_Record[31].FileIndex = 6;
+1121   1              POST_Record[31].UpdateSelf = FALSE;
+1122   1              POST_Record[31].PValue = &BUF_Text[17];
+1123   1              pText = POST_Record[31].PValue;
+1124   1              pText->CurrValue = postbuf_text17[0];
+1125   1              pText->UserValue = postbuf_text17[1];
+1126   1              pText->Offset = 4561;
+1127   1              pText->DefaultLength = 12;
+1128   1              pText->CurrValue[0] = 'x';
+1129   1              pText->CurrValue[1] = 'l';
+1130   1              pText->CurrValue[2] = 'w';
+1131   1              pText->CurrValue[3] = 't';
+1132   1              pText->CurrValue[4] = 'e';
+1133   1              pText->CurrValue[5] = 'c';
+1134   1              pText->CurrValue[6] = 'h';
+1135   1              pText->CurrValue[7] = '.';
+1136   1              pText->CurrValue[8] = 'c';
+1137   1              pText->CurrValue[9] = 'o';
+1138   1              pText->CurrValue[10] = 'm';
+1139   1              pText->CurrValue[11] = '"';
+1140   1              pText->CurrLength = 12;
+1141   1      
+1142   1              /* for record 32 */
+1143   1              POST_Record[32].Occupy = 1;
+1144   1              POST_Record[32].PostType = POST_TYPE_TEXT;
+1145   1              POST_Record[32].Name[0] = 'c';
+1146   1              POST_Record[32].Name[1] = '_';
+1147   1              POST_Record[32].Name[2] = 'd';
+1148   1              POST_Record[32].Name[3] = 'e';
+1149   1              POST_Record[32].Name[4] = 's';
+1150   1              POST_Record[32].Name[5] = 'p';
+1151   1              POST_Record[32].Name[6] = 'o';
+1152   1              POST_Record[32].Name[7] = 'r';
+1153   1              POST_Record[32].Name[8] = 't';
+1154   1              POST_Record[32].NameLen = 9;
+1155   1              POST_Record[32].FileIndex = 6;
+1156   1              POST_Record[32].UpdateSelf = FALSE;
+1157   1              POST_Record[32].PValue = &BUF_Text[18];
+1158   1              pText = POST_Record[32].PValue;
+1159   1              pText->CurrValue = postbuf_text18[0];
+1160   1              pText->UserValue = postbuf_text18[1];
+1161   1              pText->Offset = 4819;
+1162   1              pText->DefaultLength = 5;
+1163   1              pText->CurrValue[0] = '5';
+1164   1              pText->CurrValue[1] = '0';
+1165   1              pText->CurrValue[2] = '0';
+1166   1              pText->CurrValue[3] = '0';
+1167   1              pText->CurrValue[4] = '"';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 20  
+
+1168   1              pText->CurrLength = 5;
+1169   1      
+1170   1              /* for record 33 */
+1171   1              POST_Record[33].Occupy = 1;
+1172   1              POST_Record[33].PostType = POST_TYPE_SUBMIT;
+1173   1              POST_Record[33].Name[0] = 'r';
+1174   1              POST_Record[33].Name[1] = 'e';
+1175   1              POST_Record[33].Name[2] = 's';
+1176   1              POST_Record[33].Name[3] = 't';
+1177   1              POST_Record[33].Name[4] = 'o';
+1178   1              POST_Record[33].Name[5] = 'r';
+1179   1              POST_Record[33].Name[6] = 'e';
+1180   1              POST_Record[33].NameLen = 7;
+1181   1              POST_Record[33].FileIndex = 0xff;
+1182   1              POST_Record[33].UpdateSelf = FALSE;
+1183   1              POST_Record[33].PValue = &BUF_Submit[4];
+1184   1              pSubmit = POST_Record[33].PValue;
+1185   1              pSubmit->Value[0] = 'R';
+1186   1              pSubmit->Value[1] = 'e';
+1187   1              pSubmit->Value[2] = 's';
+1188   1              pSubmit->Value[3] = 't';
+1189   1              pSubmit->Value[4] = 'o';
+1190   1              pSubmit->Value[5] = 'r';
+1191   1              pSubmit->Value[6] = 'e';
+1192   1              pSubmit->Value[7] = '_';
+1193   1              pSubmit->Value[8] = 'D';
+1194   1              pSubmit->Value[9] = 'e';
+1195   1              pSubmit->Value[10] = 'f';
+1196   1              pSubmit->Value[11] = 'a';
+1197   1              pSubmit->Value[12] = 'u';
+1198   1              pSubmit->Value[13] = 'l';
+1199   1              pSubmit->Value[14] = 't';
+1200   1              pSubmit->DefaultVlaueLen = 15;
+1201   1              pSubmit->IsApply = 1;
+1202   1      
+1203   1              /* for record 34 */
+1204   1              POST_Record[34].Occupy = 1;
+1205   1              POST_Record[34].PostType = POST_TYPE_SUBMIT;
+1206   1              POST_Record[34].Name[0] = 'r';
+1207   1              POST_Record[34].Name[1] = 'e';
+1208   1              POST_Record[34].Name[2] = 'b';
+1209   1              POST_Record[34].Name[3] = 'o';
+1210   1              POST_Record[34].Name[4] = 'o';
+1211   1              POST_Record[34].Name[5] = 't';
+1212   1              POST_Record[34].NameLen = 6;
+1213   1              POST_Record[34].FileIndex = 0xff;
+1214   1              POST_Record[34].UpdateSelf = FALSE;
+1215   1              POST_Record[34].PValue = &BUF_Submit[5];
+1216   1              pSubmit = POST_Record[34].PValue;
+1217   1              pSubmit->Value[0] = 'R';
+1218   1              pSubmit->Value[1] = 'e';
+1219   1              pSubmit->Value[2] = 'b';
+1220   1              pSubmit->Value[3] = 'o';
+1221   1              pSubmit->Value[4] = 'o';
+1222   1              pSubmit->Value[5] = 't';
+1223   1              pSubmit->DefaultVlaueLen = 6;
+1224   1              pSubmit->IsApply = 1;
+1225   1      
+1226   1              /* for record 35 */
+1227   1              POST_Record[35].Occupy = 1;
+1228   1              POST_Record[35].PostType = POST_TYPE_TEXT;
+1229   1              POST_Record[35].Name[0] = 'c';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 21  
+
+1230   1              POST_Record[35].Name[1] = 'm';
+1231   1              POST_Record[35].Name[2] = 'd';
+1232   1              POST_Record[35].NameLen = 3;
+1233   1              POST_Record[35].FileIndex = 7;
+1234   1              POST_Record[35].UpdateSelf = FALSE;
+1235   1              POST_Record[35].PValue = &BUF_Text[19];
+1236   1              pText = POST_Record[35].PValue;
+1237   1              pText->CurrValue = postbuf_text19[0];
+1238   1              pText->UserValue = postbuf_text19[1];
+1239   1              pText->Offset = 326;
+1240   1              pText->DefaultLength = 1;
+1241   1              pText->CurrValue[0] = '"';
+1242   1              pText->CurrLength = 1;
+1243   1      
+1244   1              /* for record 36 */
+1245   1              POST_Record[36].Occupy = 1;
+1246   1              POST_Record[36].PostType = POST_TYPE_TEXT;
+1247   1              POST_Record[36].Name[0] = 'u';
+1248   1              POST_Record[36].Name[1] = 's';
+1249   1              POST_Record[36].Name[2] = 'e';
+1250   1              POST_Record[36].Name[3] = 'r';
+1251   1              POST_Record[36].Name[4] = 'n';
+1252   1              POST_Record[36].Name[5] = 'a';
+1253   1              POST_Record[36].Name[6] = 'm';
+1254   1              POST_Record[36].Name[7] = 'e';
+1255   1              POST_Record[36].NameLen = 8;
+1256   1              POST_Record[36].FileIndex = 8;
+1257   1              POST_Record[36].UpdateSelf = FALSE;
+1258   1              POST_Record[36].PValue = &BUF_Text[20];
+1259   1              pText = POST_Record[36].PValue;
+1260   1              pText->CurrValue = postbuf_text20[0];
+1261   1              pText->UserValue = postbuf_text20[1];
+1262   1              pText->Offset = 837;
+1263   1              pText->DefaultLength = 1;
+1264   1              pText->CurrValue[0] = '"';
+1265   1              pText->CurrLength = 1;
+1266   1      
+1267   1              /* for record 37 */
+1268   1              POST_Record[37].Occupy = 1;
+1269   1              POST_Record[37].PostType = POST_TYPE_PASSWORD;
+1270   1              POST_Record[37].Name[0] = 'p';
+1271   1              POST_Record[37].Name[1] = 'a';
+1272   1              POST_Record[37].Name[2] = 's';
+1273   1              POST_Record[37].Name[3] = 's';
+1274   1              POST_Record[37].Name[4] = 'w';
+1275   1              POST_Record[37].Name[5] = 'o';
+1276   1              POST_Record[37].Name[6] = 'r';
+1277   1              POST_Record[37].Name[7] = 'd';
+1278   1              POST_Record[37].NameLen = 8;
+1279   1              POST_Record[37].FileIndex = 8;
+1280   1              POST_Record[37].UpdateSelf = FALSE;
+1281   1              POST_Record[37].PValue = &BUF_Password[0];
+1282   1              pPassword = POST_Record[37].PValue;
+1283   1              pPassword->CurrValue = postbuf_password0[0];
+1284   1              pPassword->UserValue = postbuf_password0[1];
+1285   1              pPassword->Offset = 946;
+1286   1              pPassword->DefaultLength = 1;
+1287   1              pPassword->CurrValue[0] = '"';
+1288   1              pPassword->CurrLength = 1;
+1289   1      
+1290   1              /* for record 38 */
+1291   1              POST_Record[38].Occupy = 1;
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 22  
+
+1292   1              POST_Record[38].PostType = POST_TYPE_SUBMIT;
+1293   1              POST_Record[38].Name[0] = 'L';
+1294   1              POST_Record[38].Name[1] = 'o';
+1295   1              POST_Record[38].Name[2] = 'g';
+1296   1              POST_Record[38].Name[3] = 'i';
+1297   1              POST_Record[38].Name[4] = 'n';
+1298   1              POST_Record[38].NameLen = 5;
+1299   1              POST_Record[38].FileIndex = 0xff;
+1300   1              POST_Record[38].UpdateSelf = FALSE;
+1301   1              POST_Record[38].PValue = &BUF_Submit[6];
+1302   1              pSubmit = POST_Record[38].PValue;
+1303   1              pSubmit->Value[0] = 'L';
+1304   1              pSubmit->Value[1] = 'o';
+1305   1              pSubmit->Value[2] = 'g';
+1306   1              pSubmit->Value[3] = 'i';
+1307   1              pSubmit->Value[4] = 'n';
+1308   1              pSubmit->DefaultVlaueLen = 5;
+1309   1              pSubmit->IsApply = 1;
+1310   1      
+1311   1              /* for record 39 */
+1312   1              POST_Record[39].Occupy = 1;
+1313   1              POST_Record[39].PostType = POST_TYPE_TEXT;
+1314   1              POST_Record[39].Name[0] = 'n';
+1315   1              POST_Record[39].Name[1] = 'e';
+1316   1              POST_Record[39].Name[2] = 'w';
+1317   1              POST_Record[39].Name[3] = '_';
+1318   1              POST_Record[39].Name[4] = 'u';
+1319   1              POST_Record[39].Name[5] = 's';
+1320   1              POST_Record[39].Name[6] = 'n';
+1321   1              POST_Record[39].NameLen = 7;
+1322   1              POST_Record[39].FileIndex = 9;
+1323   1              POST_Record[39].UpdateSelf = FALSE;
+1324   1              POST_Record[39].PValue = &BUF_Text[21];
+1325   1              pText = POST_Record[39].PValue;
+1326   1              pText->CurrValue = postbuf_text21[0];
+1327   1              pText->UserValue = postbuf_text21[1];
+1328   1              pText->Offset = 1164;
+1329   1              pText->DefaultLength = 1;
+1330   1              pText->CurrValue[0] = '"';
+1331   1              pText->CurrLength = 1;
+1332   1      
+1333   1              /* for record 40 */
+1334   1              POST_Record[40].Occupy = 1;
+1335   1              POST_Record[40].PostType = POST_TYPE_PASSWORD;
+1336   1              POST_Record[40].Name[0] = 'o';
+1337   1              POST_Record[40].Name[1] = 'l';
+1338   1              POST_Record[40].Name[2] = 'd';
+1339   1              POST_Record[40].Name[3] = '_';
+1340   1              POST_Record[40].Name[4] = 'p';
+1341   1              POST_Record[40].Name[5] = 's';
+1342   1              POST_Record[40].Name[6] = 'w';
+1343   1              POST_Record[40].NameLen = 7;
+1344   1              POST_Record[40].FileIndex = 9;
+1345   1              POST_Record[40].UpdateSelf = FALSE;
+1346   1              POST_Record[40].PValue = &BUF_Password[1];
+1347   1              pPassword = POST_Record[40].PValue;
+1348   1              pPassword->CurrValue = postbuf_password1[0];
+1349   1              pPassword->UserValue = postbuf_password1[1];
+1350   1              pPassword->Offset = 1576;
+1351   1              pPassword->DefaultLength = 1;
+1352   1              pPassword->CurrValue[0] = '"';
+1353   1              pPassword->CurrLength = 1;
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 23  
+
+1354   1      
+1355   1              /* for record 41 */
+1356   1              POST_Record[41].Occupy = 1;
+1357   1              POST_Record[41].PostType = POST_TYPE_PASSWORD;
+1358   1              POST_Record[41].Name[0] = 'n';
+1359   1              POST_Record[41].Name[1] = 'e';
+1360   1              POST_Record[41].Name[2] = 'w';
+1361   1              POST_Record[41].Name[3] = '_';
+1362   1              POST_Record[41].Name[4] = 'p';
+1363   1              POST_Record[41].Name[5] = 's';
+1364   1              POST_Record[41].Name[6] = 'w';
+1365   1              POST_Record[41].NameLen = 7;
+1366   1              POST_Record[41].FileIndex = 9;
+1367   1              POST_Record[41].UpdateSelf = FALSE;
+1368   1              POST_Record[41].PValue = &BUF_Password[2];
+1369   1              pPassword = POST_Record[41].PValue;
+1370   1              pPassword->CurrValue = postbuf_password2[0];
+1371   1              pPassword->UserValue = postbuf_password2[1];
+1372   1              pPassword->Offset = 1688;
+1373   1              pPassword->DefaultLength = 1;
+1374   1              pPassword->CurrValue[0] = '"';
+1375   1              pPassword->CurrLength = 1;
+1376   1      
+1377   1              /* for record 42 */
+1378   1              POST_Record[42].Occupy = 1;
+1379   1              POST_Record[42].PostType = POST_TYPE_PASSWORD;
+1380   1              POST_Record[42].Name[0] = 'c';
+1381   1              POST_Record[42].Name[1] = 'f';
+1382   1              POST_Record[42].Name[2] = 'm';
+1383   1              POST_Record[42].Name[3] = '_';
+1384   1              POST_Record[42].Name[4] = 'p';
+1385   1              POST_Record[42].Name[5] = 's';
+1386   1              POST_Record[42].Name[6] = 'w';
+1387   1              POST_Record[42].NameLen = 7;
+1388   1              POST_Record[42].FileIndex = 9;
+1389   1              POST_Record[42].UpdateSelf = FALSE;
+1390   1              POST_Record[42].PValue = &BUF_Password[3];
+1391   1              pPassword = POST_Record[42].PValue;
+1392   1              pPassword->CurrValue = postbuf_password3[0];
+1393   1              pPassword->UserValue = postbuf_password3[1];
+1394   1              pPassword->Offset = 1804;
+1395   1              pPassword->DefaultLength = 1;
+1396   1              pPassword->CurrValue[0] = '"';
+1397   1              pPassword->CurrLength = 1;
+1398   1      
+1399   1              /* for record 43 */
+1400   1              POST_Record[43].Occupy = 1;
+1401   1              POST_Record[43].PostType = POST_TYPE_SELECT;
+1402   1              POST_Record[43].Name[0] = 'n';
+1403   1              POST_Record[43].Name[1] = 'e';
+1404   1              POST_Record[43].Name[2] = 't';
+1405   1              POST_Record[43].Name[3] = 'w';
+1406   1              POST_Record[43].Name[4] = 'o';
+1407   1              POST_Record[43].Name[5] = 'r';
+1408   1              POST_Record[43].Name[6] = 'k';
+1409   1              POST_Record[43].Name[7] = '_';
+1410   1              POST_Record[43].Name[8] = 'm';
+1411   1              POST_Record[43].Name[9] = 'o';
+1412   1              POST_Record[43].Name[10] = 'd';
+1413   1              POST_Record[43].Name[11] = 'e';
+1414   1              POST_Record[43].NameLen = 12;
+1415   1              POST_Record[43].FileIndex = 13;
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 24  
+
+1416   1              POST_Record[43].UpdateSelf = FALSE;
+1417   1              POST_Record[43].PValue = &BUF_Select[9];
+1418   1              pSelect = POST_Record[43].PValue;
+1419   1              pSelect->Offset[0] = 1158;
+1420   1              pSelect->Offset[1] = 1221;
+1421   1              pSelect->Count = 2;
+1422   1              pSelect->DefaultSet = 0;
+1423   1              pSelect->CurrentSet = 0;
+1424   1              pSelect->UserSet = 0;
+1425   1      
+1426   1              /* for record 44 */
+1427   1              POST_Record[44].Occupy = 1;
+1428   1              POST_Record[44].PostType = POST_TYPE_SELECT;
+1429   1              POST_Record[44].Name[0] = 'c';
+1430   1              POST_Record[44].Name[1] = 'h';
+1431   1              POST_Record[44].Name[2] = 'a';
+1432   1              POST_Record[44].Name[3] = 'n';
+1433   1              POST_Record[44].Name[4] = 'n';
+1434   1              POST_Record[44].Name[5] = 'e';
+1435   1              POST_Record[44].Name[6] = 'l';
+1436   1              POST_Record[44].NameLen = 7;
+1437   1              POST_Record[44].FileIndex = 13;
+1438   1              POST_Record[44].UpdateSelf = FALSE;
+1439   1              POST_Record[44].PValue = &BUF_Select[10];
+1440   1              pSelect = POST_Record[44].PValue;
+1441   1              pSelect->Offset[0] = 1335;
+1442   1              pSelect->Offset[1] = 1388;
+1443   1              pSelect->Offset[2] = 1429;
+1444   1              pSelect->Offset[3] = 1470;
+1445   1              pSelect->Offset[4] = 1511;
+1446   1              pSelect->Offset[5] = 1552;
+1447   1              pSelect->Offset[6] = 1593;
+1448   1              pSelect->Offset[7] = 1634;
+1449   1              pSelect->Offset[8] = 1675;
+1450   1              pSelect->Offset[9] = 1716;
+1451   1              pSelect->Offset[10] = 1757;
+1452   1              pSelect->Offset[11] = 1799;
+1453   1              pSelect->Count = 12;
+1454   1              pSelect->DefaultSet = 0;
+1455   1              pSelect->CurrentSet = 0;
+1456   1              pSelect->UserSet = 0;
+1457   1      
+1458   1              /* for record 45 */
+1459   1              POST_Record[45].Occupy = 1;
+1460   1              POST_Record[45].PostType = POST_TYPE_TEXT;
+1461   1              POST_Record[45].Name[0] = 's';
+1462   1              POST_Record[45].Name[1] = 's';
+1463   1              POST_Record[45].Name[2] = 'i';
+1464   1              POST_Record[45].Name[3] = 'd';
+1465   1              POST_Record[45].NameLen = 4;
+1466   1              POST_Record[45].FileIndex = 13;
+1467   1              POST_Record[45].UpdateSelf = FALSE;
+1468   1              POST_Record[45].PValue = &BUF_Text[22];
+1469   1              pText = POST_Record[45].PValue;
+1470   1              pText->CurrValue = postbuf_text22[0];
+1471   1              pText->UserValue = postbuf_text22[1];
+1472   1              pText->Offset = 1918;
+1473   1              pText->DefaultLength = 8;
+1474   1              pText->CurrValue[0] = 'x';
+1475   1              pText->CurrValue[1] = 'l';
+1476   1              pText->CurrValue[2] = 'w';
+1477   1              pText->CurrValue[3] = 't';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 25  
+
+1478   1              pText->CurrValue[4] = 'e';
+1479   1              pText->CurrValue[5] = 's';
+1480   1              pText->CurrValue[6] = 't';
+1481   1              pText->CurrValue[7] = '"';
+1482   1              pText->CurrLength = 8;
+1483   1      
+1484   1              /* for record 46 */
+1485   1              POST_Record[46].Occupy = 1;
+1486   1              POST_Record[46].PostType = POST_TYPE_SELECT;
+1487   1              POST_Record[46].Name[0] = 's';
+1488   1              POST_Record[46].Name[1] = 'e';
+1489   1              POST_Record[46].Name[2] = 'c';
+1490   1              POST_Record[46].Name[3] = 'u';
+1491   1              POST_Record[46].Name[4] = 'r';
+1492   1              POST_Record[46].Name[5] = 'i';
+1493   1              POST_Record[46].Name[6] = 't';
+1494   1              POST_Record[46].Name[7] = 'y';
+1495   1              POST_Record[46].Name[8] = '_';
+1496   1              POST_Record[46].Name[9] = 'm';
+1497   1              POST_Record[46].Name[10] = 'o';
+1498   1              POST_Record[46].Name[11] = 'd';
+1499   1              POST_Record[46].Name[12] = 'e';
+1500   1              POST_Record[46].NameLen = 13;
+1501   1              POST_Record[46].FileIndex = 13;
+1502   1              POST_Record[46].UpdateSelf = FALSE;
+1503   1              POST_Record[46].PValue = &BUF_Select[11];
+1504   1              pSelect = POST_Record[46].PValue;
+1505   1              pSelect->Offset[0] = 2042;
+1506   1              pSelect->Offset[1] = 2102;
+1507   1              pSelect->Offset[2] = 2148;
+1508   1              pSelect->Offset[3] = 2195;
+1509   1              pSelect->Offset[4] = 2239;
+1510   1              pSelect->Count = 5;
+1511   1              pSelect->DefaultSet = 0;
+1512   1              pSelect->CurrentSet = 0;
+1513   1              pSelect->UserSet = 0;
+1514   1      
+1515   1              /* for record 47 */
+1516   1              POST_Record[47].Occupy = 1;
+1517   1              POST_Record[47].PostType = POST_TYPE_SELECT;
+1518   1              POST_Record[47].Name[0] = 'k';
+1519   1              POST_Record[47].Name[1] = 'e';
+1520   1              POST_Record[47].Name[2] = 'y';
+1521   1              POST_Record[47].Name[3] = '_';
+1522   1              POST_Record[47].Name[4] = 'l';
+1523   1              POST_Record[47].Name[5] = 'e';
+1524   1              POST_Record[47].Name[6] = 'n';
+1525   1              POST_Record[47].Name[7] = 'g';
+1526   1              POST_Record[47].Name[8] = 't';
+1527   1              POST_Record[47].Name[9] = 'h';
+1528   1              POST_Record[47].NameLen = 10;
+1529   1              POST_Record[47].FileIndex = 13;
+1530   1              POST_Record[47].UpdateSelf = FALSE;
+1531   1              POST_Record[47].PValue = &BUF_Select[12];
+1532   1              pSelect = POST_Record[47].PValue;
+1533   1              pSelect->Offset[0] = 2453;
+1534   1              pSelect->Offset[1] = 2509;
+1535   1              pSelect->Count = 2;
+1536   1              pSelect->DefaultSet = 0;
+1537   1              pSelect->CurrentSet = 0;
+1538   1              pSelect->UserSet = 0;
+1539   1      
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 26  
+
+1540   1              /* for record 48 */
+1541   1              POST_Record[48].Occupy = 1;
+1542   1              POST_Record[48].PostType = POST_TYPE_SELECT;
+1543   1              POST_Record[48].Name[0] = 'k';
+1544   1              POST_Record[48].Name[1] = 'e';
+1545   1              POST_Record[48].Name[2] = 'y';
+1546   1              POST_Record[48].Name[3] = '_';
+1547   1              POST_Record[48].Name[4] = 'i';
+1548   1              POST_Record[48].Name[5] = 'n';
+1549   1              POST_Record[48].Name[6] = 'd';
+1550   1              POST_Record[48].Name[7] = 'e';
+1551   1              POST_Record[48].Name[8] = 'x';
+1552   1              POST_Record[48].NameLen = 9;
+1553   1              POST_Record[48].FileIndex = 13;
+1554   1              POST_Record[48].UpdateSelf = FALSE;
+1555   1              POST_Record[48].PValue = &BUF_Select[13];
+1556   1              pSelect = POST_Record[48].PValue;
+1557   1              pSelect->Offset[0] = 2636;
+1558   1              pSelect->Offset[1] = 2696;
+1559   1              pSelect->Offset[2] = 2747;
+1560   1              pSelect->Offset[3] = 2798;
+1561   1              pSelect->Count = 4;
+1562   1              pSelect->DefaultSet = 0;
+1563   1              pSelect->CurrentSet = 0;
+1564   1              pSelect->UserSet = 0;
+1565   1      
+1566   1              /* for record 49 */
+1567   1              POST_Record[49].Occupy = 1;
+1568   1              POST_Record[49].PostType = POST_TYPE_TEXT;
+1569   1              POST_Record[49].Name[0] = 'k';
+1570   1              POST_Record[49].Name[1] = 'e';
+1571   1              POST_Record[49].Name[2] = 'y';
+1572   1              POST_Record[49].Name[3] = '_';
+1573   1              POST_Record[49].Name[4] = 'i';
+1574   1              POST_Record[49].Name[5] = 'n';
+1575   1              POST_Record[49].Name[6] = 'd';
+1576   1              POST_Record[49].Name[7] = 'e';
+1577   1              POST_Record[49].Name[8] = 'x';
+1578   1              POST_Record[49].Name[9] = '_';
+1579   1              POST_Record[49].Name[10] = '0';
+1580   1              POST_Record[49].NameLen = 11;
+1581   1              POST_Record[49].FileIndex = 13;
+1582   1              POST_Record[49].UpdateSelf = FALSE;
+1583   1              POST_Record[49].PValue = &BUF_Text[23];
+1584   1              pText = POST_Record[49].PValue;
+1585   1              pText->CurrValue = postbuf_text23[0];
+1586   1              pText->UserValue = postbuf_text23[1];
+1587   1              pText->Offset = 2939;
+1588   1              pText->DefaultLength = 1;
+1589   1              pText->CurrValue[0] = '"';
+1590   1              pText->CurrLength = 1;
+1591   1      
+1592   1              /* for record 50 */
+1593   1              POST_Record[50].Occupy = 1;
+1594   1              POST_Record[50].PostType = POST_TYPE_TEXT;
+1595   1              POST_Record[50].Name[0] = 'k';
+1596   1              POST_Record[50].Name[1] = 'e';
+1597   1              POST_Record[50].Name[2] = 'y';
+1598   1              POST_Record[50].Name[3] = '_';
+1599   1              POST_Record[50].Name[4] = 'i';
+1600   1              POST_Record[50].Name[5] = 'n';
+1601   1              POST_Record[50].Name[6] = 'd';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 27  
+
+1602   1              POST_Record[50].Name[7] = 'e';
+1603   1              POST_Record[50].Name[8] = 'x';
+1604   1              POST_Record[50].Name[9] = '_';
+1605   1              POST_Record[50].Name[10] = '1';
+1606   1              POST_Record[50].NameLen = 11;
+1607   1              POST_Record[50].FileIndex = 13;
+1608   1              POST_Record[50].UpdateSelf = FALSE;
+1609   1              POST_Record[50].PValue = &BUF_Text[24];
+1610   1              pText = POST_Record[50].PValue;
+1611   1              pText->CurrValue = postbuf_text24[0];
+1612   1              pText->UserValue = postbuf_text24[1];
+1613   1              pText->Offset = 3086;
+1614   1              pText->DefaultLength = 1;
+1615   1              pText->CurrValue[0] = '"';
+1616   1              pText->CurrLength = 1;
+1617   1      
+1618   1              /* for record 51 */
+1619   1              POST_Record[51].Occupy = 1;
+1620   1              POST_Record[51].PostType = POST_TYPE_TEXT;
+1621   1              POST_Record[51].Name[0] = 'k';
+1622   1              POST_Record[51].Name[1] = 'e';
+1623   1              POST_Record[51].Name[2] = 'y';
+1624   1              POST_Record[51].Name[3] = '_';
+1625   1              POST_Record[51].Name[4] = 'i';
+1626   1              POST_Record[51].Name[5] = 'n';
+1627   1              POST_Record[51].Name[6] = 'd';
+1628   1              POST_Record[51].Name[7] = 'e';
+1629   1              POST_Record[51].Name[8] = 'x';
+1630   1              POST_Record[51].Name[9] = '_';
+1631   1              POST_Record[51].Name[10] = '2';
+1632   1              POST_Record[51].NameLen = 11;
+1633   1              POST_Record[51].FileIndex = 13;
+1634   1              POST_Record[51].UpdateSelf = FALSE;
+1635   1              POST_Record[51].PValue = &BUF_Text[25];
+1636   1              pText = POST_Record[51].PValue;
+1637   1              pText->CurrValue = postbuf_text25[0];
+1638   1              pText->UserValue = postbuf_text25[1];
+1639   1              pText->Offset = 3234;
+1640   1              pText->DefaultLength = 1;
+1641   1              pText->CurrValue[0] = '"';
+1642   1              pText->CurrLength = 1;
+1643   1      
+1644   1              /* for record 52 */
+1645   1              POST_Record[52].Occupy = 1;
+1646   1              POST_Record[52].PostType = POST_TYPE_TEXT;
+1647   1              POST_Record[52].Name[0] = 'k';
+1648   1              POST_Record[52].Name[1] = 'e';
+1649   1              POST_Record[52].Name[2] = 'y';
+1650   1              POST_Record[52].Name[3] = '_';
+1651   1              POST_Record[52].Name[4] = 'i';
+1652   1              POST_Record[52].Name[5] = 'n';
+1653   1              POST_Record[52].Name[6] = 'd';
+1654   1              POST_Record[52].Name[7] = 'e';
+1655   1              POST_Record[52].Name[8] = 'x';
+1656   1              POST_Record[52].Name[9] = '_';
+1657   1              POST_Record[52].Name[10] = '3';
+1658   1              POST_Record[52].NameLen = 11;
+1659   1              POST_Record[52].FileIndex = 13;
+1660   1              POST_Record[52].UpdateSelf = FALSE;
+1661   1              POST_Record[52].PValue = &BUF_Text[26];
+1662   1              pText = POST_Record[52].PValue;
+1663   1              pText->CurrValue = postbuf_text26[0];
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 28  
+
+1664   1              pText->UserValue = postbuf_text26[1];
+1665   1              pText->Offset = 3382;
+1666   1              pText->DefaultLength = 1;
+1667   1              pText->CurrValue[0] = '"';
+1668   1              pText->CurrLength = 1;
+1669   1      
+1670   1              /* for record 53 */
+1671   1              POST_Record[53].Occupy = 1;
+1672   1              POST_Record[53].PostType = POST_TYPE_TEXT;
+1673   1              POST_Record[53].Name[0] = 'a';
+1674   1              POST_Record[53].Name[1] = 'e';
+1675   1              POST_Record[53].Name[2] = 's';
+1676   1              POST_Record[53].Name[3] = '_';
+1677   1              POST_Record[53].Name[4] = 'p';
+1678   1              POST_Record[53].Name[5] = 'a';
+1679   1              POST_Record[53].Name[6] = 's';
+1680   1              POST_Record[53].Name[7] = 's';
+1681   1              POST_Record[53].Name[8] = 'p';
+1682   1              POST_Record[53].Name[9] = 'h';
+1683   1              POST_Record[53].Name[10] = 'r';
+1684   1              POST_Record[53].Name[11] = 'a';
+1685   1              POST_Record[53].Name[12] = 's';
+1686   1              POST_Record[53].Name[13] = 'e';
+1687   1              POST_Record[53].NameLen = 14;
+1688   1              POST_Record[53].FileIndex = 13;
+1689   1              POST_Record[53].UpdateSelf = FALSE;
+1690   1              POST_Record[53].PValue = &BUF_Text[27];
+1691   1              pText = POST_Record[53].PValue;
+1692   1              pText->CurrValue = postbuf_text27[0];
+1693   1              pText->UserValue = postbuf_text27[1];
+1694   1              pText->Offset = 3728;
+1695   1              pText->DefaultLength = 1;
+1696   1              pText->CurrValue[0] = '"';
+1697   1              pText->CurrLength = 1;
+1698   1      
+1699   1              /* for record 54 */
+1700   1              POST_Record[54].Occupy = 1;
+1701   1              POST_Record[54].PostType = POST_TYPE_SELECT;
+1702   1              POST_Record[54].Name[0] = 't';
+1703   1              POST_Record[54].Name[1] = 'x';
+1704   1              POST_Record[54].Name[2] = '_';
+1705   1              POST_Record[54].Name[3] = 'd';
+1706   1              POST_Record[54].Name[4] = 'a';
+1707   1              POST_Record[54].Name[5] = 't';
+1708   1              POST_Record[54].Name[6] = 'a';
+1709   1              POST_Record[54].Name[7] = '_';
+1710   1              POST_Record[54].Name[8] = 'r';
+1711   1              POST_Record[54].Name[9] = 'a';
+1712   1              POST_Record[54].Name[10] = 't';
+1713   1              POST_Record[54].Name[11] = 'e';
+1714   1              POST_Record[54].NameLen = 12;
+1715   1              POST_Record[54].FileIndex = 13;
+1716   1              POST_Record[54].UpdateSelf = FALSE;
+1717   1              POST_Record[54].PValue = &BUF_Select[14];
+1718   1              pSelect = POST_Record[54].PValue;
+1719   1              pSelect->Offset[0] = 4249;
+1720   1              pSelect->Offset[1] = 4307;
+1721   1              pSelect->Offset[2] = 4358;
+1722   1              pSelect->Offset[3] = 4409;
+1723   1              pSelect->Offset[4] = 4462;
+1724   1              pSelect->Offset[5] = 4513;
+1725   1              pSelect->Offset[6] = 4564;
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 29  
+
+1726   1              pSelect->Offset[7] = 4616;
+1727   1              pSelect->Offset[8] = 4668;
+1728   1              pSelect->Offset[9] = 4720;
+1729   1              pSelect->Offset[10] = 4772;
+1730   1              pSelect->Offset[11] = 4824;
+1731   1              pSelect->Offset[12] = 4876;
+1732   1              pSelect->Count = 13;
+1733   1              pSelect->DefaultSet = 0;
+1734   1              pSelect->CurrentSet = 0;
+1735   1              pSelect->UserSet = 0;
+1736   1      
+1737   1              /* for record 55 */
+1738   1              POST_Record[55].Occupy = 1;
+1739   1              POST_Record[55].PostType = POST_TYPE_SELECT;
+1740   1              POST_Record[55].Name[0] = 't';
+1741   1              POST_Record[55].Name[1] = 'x';
+1742   1              POST_Record[55].Name[2] = '_';
+1743   1              POST_Record[55].Name[3] = 'p';
+1744   1              POST_Record[55].Name[4] = 'o';
+1745   1              POST_Record[55].Name[5] = 'w';
+1746   1              POST_Record[55].Name[6] = 'e';
+1747   1              POST_Record[55].Name[7] = 'r';
+1748   1              POST_Record[55].NameLen = 8;
+1749   1              POST_Record[55].FileIndex = 13;
+1750   1              POST_Record[55].UpdateSelf = FALSE;
+1751   1              POST_Record[55].PValue = &BUF_Select[15];
+1752   1              pSelect = POST_Record[55].PValue;
+1753   1              pSelect->Offset[0] = 5014;
+1754   1              pSelect->Offset[1] = 5072;
+1755   1              pSelect->Offset[2] = 5120;
+1756   1              pSelect->Offset[3] = 5168;
+1757   1              pSelect->Offset[4] = 5218;
+1758   1              pSelect->Count = 5;
+1759   1              pSelect->DefaultSet = 0;
+1760   1              pSelect->CurrentSet = 0;
+1761   1              pSelect->UserSet = 0;
+1762   1      
+1763   1              /* for record 56 */
+1764   1              POST_Record[56].Occupy = 1;
+1765   1              POST_Record[56].PostType = POST_TYPE_SELECT;
+1766   1              POST_Record[56].Name[0] = 'p';
+1767   1              POST_Record[56].Name[1] = 'r';
+1768   1              POST_Record[56].Name[2] = 'e';
+1769   1              POST_Record[56].Name[3] = 'a';
+1770   1              POST_Record[56].Name[4] = 'm';
+1771   1              POST_Record[56].Name[5] = 'b';
+1772   1              POST_Record[56].Name[6] = 'l';
+1773   1              POST_Record[56].Name[7] = 'e';
+1774   1              POST_Record[56].NameLen = 8;
+1775   1              POST_Record[56].FileIndex = 13;
+1776   1              POST_Record[56].UpdateSelf = FALSE;
+1777   1              POST_Record[56].PValue = &BUF_Select[16];
+1778   1              pSelect = POST_Record[56].PValue;
+1779   1              pSelect->Offset[0] = 5343;
+1780   1              pSelect->Offset[1] = 5401;
+1781   1              pSelect->Count = 2;
+1782   1              pSelect->DefaultSet = 0;
+1783   1              pSelect->CurrentSet = 0;
+1784   1              pSelect->UserSet = 0;
+1785   1      
+1786   1              /* for record 57 */
+1787   1              POST_Record[57].Occupy = 1;
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 30  
+
+1788   1              POST_Record[57].PostType = POST_TYPE_TEXT;
+1789   1              POST_Record[57].Name[0] = 'b';
+1790   1              POST_Record[57].Name[1] = 'e';
+1791   1              POST_Record[57].Name[2] = 'a';
+1792   1              POST_Record[57].Name[3] = 'c';
+1793   1              POST_Record[57].Name[4] = 'o';
+1794   1              POST_Record[57].Name[5] = 'n';
+1795   1              POST_Record[57].Name[6] = '_';
+1796   1              POST_Record[57].Name[7] = 'i';
+1797   1              POST_Record[57].Name[8] = 'n';
+1798   1              POST_Record[57].Name[9] = 't';
+1799   1              POST_Record[57].Name[10] = 'v';
+1800   1              POST_Record[57].NameLen = 11;
+1801   1              POST_Record[57].FileIndex = 13;
+1802   1              POST_Record[57].UpdateSelf = FALSE;
+1803   1              POST_Record[57].PValue = &BUF_Text[28];
+1804   1              pText = POST_Record[57].PValue;
+1805   1              pText->CurrValue = postbuf_text28[0];
+1806   1              pText->UserValue = postbuf_text28[1];
+1807   1              pText->Offset = 5527;
+1808   1              pText->DefaultLength = 4;
+1809   1              pText->CurrValue[0] = '1';
+1810   1              pText->CurrValue[1] = '0';
+1811   1              pText->CurrValue[2] = '0';
+1812   1              pText->CurrValue[3] = '"';
+1813   1              pText->CurrLength = 4;
+1814   1      
+1815   1              /* for record 58 */
+1816   1              POST_Record[58].Occupy = 1;
+1817   1              POST_Record[58].PostType = POST_TYPE_TEXT;
+1818   1              POST_Record[58].Name[0] = 'r';
+1819   1              POST_Record[58].Name[1] = 't';
+1820   1              POST_Record[58].Name[2] = 's';
+1821   1              POST_Record[58].Name[3] = '_';
+1822   1              POST_Record[58].Name[4] = 't';
+1823   1              POST_Record[58].Name[5] = 'h';
+1824   1              POST_Record[58].Name[6] = 'r';
+1825   1              POST_Record[58].Name[7] = 'e';
+1826   1              POST_Record[58].Name[8] = 's';
+1827   1              POST_Record[58].Name[9] = 'h';
+1828   1              POST_Record[58].Name[10] = 'o';
+1829   1              POST_Record[58].Name[11] = 'l';
+1830   1              POST_Record[58].Name[12] = 'd';
+1831   1              POST_Record[58].NameLen = 13;
+1832   1              POST_Record[58].FileIndex = 13;
+1833   1              POST_Record[58].UpdateSelf = FALSE;
+1834   1              POST_Record[58].PValue = &BUF_Text[29];
+1835   1              pText = POST_Record[58].PValue;
+1836   1              pText->CurrValue = postbuf_text29[0];
+1837   1              pText->UserValue = postbuf_text29[1];
+1838   1              pText->Offset = 5738;
+1839   1              pText->DefaultLength = 5;
+1840   1              pText->CurrValue[0] = '2';
+1841   1              pText->CurrValue[1] = '4';
+1842   1              pText->CurrValue[2] = '3';
+1843   1              pText->CurrValue[3] = '2';
+1844   1              pText->CurrValue[4] = '"';
+1845   1              pText->CurrLength = 5;
+1846   1      
+1847   1              /* for record 59 */
+1848   1              POST_Record[59].Occupy = 1;
+1849   1              POST_Record[59].PostType = POST_TYPE_SELECT;
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 31  
+
+1850   1              POST_Record[59].Name[0] = 'a';
+1851   1              POST_Record[59].Name[1] = 'u';
+1852   1              POST_Record[59].Name[2] = 't';
+1853   1              POST_Record[59].Name[3] = 'o';
+1854   1              POST_Record[59].Name[4] = '_';
+1855   1              POST_Record[59].Name[5] = 'p';
+1856   1              POST_Record[59].Name[6] = 'w';
+1857   1              POST_Record[59].Name[7] = 'r';
+1858   1              POST_Record[59].Name[8] = '_';
+1859   1              POST_Record[59].Name[9] = 'c';
+1860   1              POST_Record[59].Name[10] = 't';
+1861   1              POST_Record[59].Name[11] = 'r';
+1862   1              POST_Record[59].Name[12] = 'l';
+1863   1              POST_Record[59].NameLen = 13;
+1864   1              POST_Record[59].FileIndex = 13;
+1865   1              POST_Record[59].UpdateSelf = FALSE;
+1866   1              POST_Record[59].PValue = &BUF_Select[17];
+1867   1              pSelect = POST_Record[59].PValue;
+1868   1              pSelect->Offset[0] = 5967;
+1869   1              pSelect->Offset[1] = 6028;
+1870   1              pSelect->Count = 2;
+1871   1              pSelect->DefaultSet = 0;
+1872   1              pSelect->CurrentSet = 0;
+1873   1              pSelect->UserSet = 0;
+1874   1      
+1875   1              /* for record 60 */
+1876   1              POST_Record[60].Occupy = 1;
+1877   1              POST_Record[60].PostType = POST_TYPE_SELECT;
+1878   1              POST_Record[60].Name[0] = 'p';
+1879   1              POST_Record[60].Name[1] = 'r';
+1880   1              POST_Record[60].Name[2] = 'o';
+1881   1              POST_Record[60].Name[3] = 't';
+1882   1              POST_Record[60].Name[4] = 'f';
+1883   1              POST_Record[60].Name[5] = 'r';
+1884   1              POST_Record[60].Name[6] = 'm';
+1885   1              POST_Record[60].Name[7] = '_';
+1886   1              POST_Record[60].Name[8] = 't';
+1887   1              POST_Record[60].Name[9] = 'y';
+1888   1              POST_Record[60].Name[10] = 'p';
+1889   1              POST_Record[60].Name[11] = 'e';
+1890   1              POST_Record[60].NameLen = 12;
+1891   1              POST_Record[60].FileIndex = 13;
+1892   1              POST_Record[60].UpdateSelf = FALSE;
+1893   1              POST_Record[60].PValue = &BUF_Select[18];
+1894   1              pSelect = POST_Record[60].PValue;
+1895   1              pSelect->Offset[0] = 6166;
+1896   1              pSelect->Offset[1] = 6223;
+1897   1              pSelect->Count = 2;
+1898   1              pSelect->DefaultSet = 0;
+1899   1              pSelect->CurrentSet = 0;
+1900   1              pSelect->UserSet = 0;
+1901   1      
+1902   1              /* for record 61 */
+1903   1              POST_Record[61].Occupy = 1;
+1904   1              POST_Record[61].PostType = POST_TYPE_SELECT;
+1905   1              POST_Record[61].Name[0] = 'w';
+1906   1              POST_Record[61].Name[1] = 'z';
+1907   1              POST_Record[61].Name[2] = 't';
+1908   1              POST_Record[61].Name[3] = 'x';
+1909   1              POST_Record[61].Name[4] = 'd';
+1910   1              POST_Record[61].Name[5] = 'a';
+1911   1              POST_Record[61].Name[6] = 't';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 32  
+
+1912   1              POST_Record[61].Name[7] = 'a';
+1913   1              POST_Record[61].Name[8] = 'r';
+1914   1              POST_Record[61].Name[9] = 'a';
+1915   1              POST_Record[61].Name[10] = 't';
+1916   1              POST_Record[61].Name[11] = 'e';
+1917   1              POST_Record[61].NameLen = 12;
+1918   1              POST_Record[61].FileIndex = 14;
+1919   1              POST_Record[61].UpdateSelf = FALSE;
+1920   1              POST_Record[61].PValue = &BUF_Select[19];
+1921   1              pSelect = POST_Record[61].PValue;
+1922   1              pSelect->Offset[0] = 1360;
+1923   1              pSelect->Offset[1] = 1416;
+1924   1              pSelect->Offset[2] = 1465;
+1925   1              pSelect->Offset[3] = 1514;
+1926   1              pSelect->Offset[4] = 1565;
+1927   1              pSelect->Offset[5] = 1614;
+1928   1              pSelect->Offset[6] = 1663;
+1929   1              pSelect->Offset[7] = 1713;
+1930   1              pSelect->Offset[8] = 1763;
+1931   1              pSelect->Offset[9] = 1813;
+1932   1              pSelect->Offset[10] = 1863;
+1933   1              pSelect->Offset[11] = 1913;
+1934   1              pSelect->Offset[12] = 1963;
+1935   1              pSelect->Count = 13;
+1936   1              pSelect->DefaultSet = 0;
+1937   1              pSelect->CurrentSet = 0;
+1938   1              pSelect->UserSet = 0;
+1939   1      
+1940   1              /* for record 62 */
+1941   1              POST_Record[62].Occupy = 1;
+1942   1              POST_Record[62].PostType = POST_TYPE_SELECT;
+1943   1              POST_Record[62].Name[0] = 'w';
+1944   1              POST_Record[62].Name[1] = 'z';
+1945   1              POST_Record[62].Name[2] = 't';
+1946   1              POST_Record[62].Name[3] = 'x';
+1947   1              POST_Record[62].Name[4] = 'p';
+1948   1              POST_Record[62].Name[5] = 'o';
+1949   1              POST_Record[62].Name[6] = 'w';
+1950   1              POST_Record[62].Name[7] = 'e';
+1951   1              POST_Record[62].Name[8] = 'r';
+1952   1              POST_Record[62].NameLen = 9;
+1953   1              POST_Record[62].FileIndex = 14;
+1954   1              POST_Record[62].UpdateSelf = FALSE;
+1955   1              POST_Record[62].PValue = &BUF_Select[20];
+1956   1              pSelect = POST_Record[62].PValue;
+1957   1              pSelect->Offset[0] = 2166;
+1958   1              pSelect->Offset[1] = 2222;
+1959   1              pSelect->Offset[2] = 2268;
+1960   1              pSelect->Offset[3] = 2314;
+1961   1              pSelect->Offset[4] = 2362;
+1962   1              pSelect->Count = 5;
+1963   1              pSelect->DefaultSet = 0;
+1964   1              pSelect->CurrentSet = 0;
+1965   1              pSelect->UserSet = 0;
+1966   1      
+1967   1              /* for record 63 */
+1968   1              POST_Record[63].Occupy = 1;
+1969   1              POST_Record[63].PostType = POST_TYPE_SELECT;
+1970   1              POST_Record[63].Name[0] = 'w';
+1971   1              POST_Record[63].Name[1] = 'z';
+1972   1              POST_Record[63].Name[2] = 'p';
+1973   1              POST_Record[63].Name[3] = 'r';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 33  
+
+1974   1              POST_Record[63].Name[4] = 'e';
+1975   1              POST_Record[63].Name[5] = 'a';
+1976   1              POST_Record[63].Name[6] = 'm';
+1977   1              POST_Record[63].Name[7] = 'b';
+1978   1              POST_Record[63].Name[8] = 'l';
+1979   1              POST_Record[63].Name[9] = 'e';
+1980   1              POST_Record[63].NameLen = 10;
+1981   1              POST_Record[63].FileIndex = 14;
+1982   1              POST_Record[63].UpdateSelf = FALSE;
+1983   1              POST_Record[63].PValue = &BUF_Select[21];
+1984   1              pSelect = POST_Record[63].PValue;
+1985   1              pSelect->Offset[0] = 2553;
+1986   1              pSelect->Offset[1] = 2609;
+1987   1              pSelect->Count = 2;
+1988   1              pSelect->DefaultSet = 0;
+1989   1              pSelect->CurrentSet = 0;
+1990   1              pSelect->UserSet = 0;
+1991   1      
+1992   1              /* for record 64 */
+1993   1              POST_Record[64].Occupy = 1;
+1994   1              POST_Record[64].PostType = POST_TYPE_TEXT;
+1995   1              POST_Record[64].Name[0] = 'w';
+1996   1              POST_Record[64].Name[1] = 'z';
+1997   1              POST_Record[64].Name[2] = 'b';
+1998   1              POST_Record[64].Name[3] = 'e';
+1999   1              POST_Record[64].Name[4] = 'a';
+2000   1              POST_Record[64].Name[5] = 'c';
+2001   1              POST_Record[64].Name[6] = 'o';
+2002   1              POST_Record[64].Name[7] = 'n';
+2003   1              POST_Record[64].Name[8] = 'i';
+2004   1              POST_Record[64].Name[9] = 'n';
+2005   1              POST_Record[64].Name[10] = 't';
+2006   1              POST_Record[64].Name[11] = 'v';
+2007   1              POST_Record[64].NameLen = 12;
+2008   1              POST_Record[64].FileIndex = 14;
+2009   1              POST_Record[64].UpdateSelf = FALSE;
+2010   1              POST_Record[64].PValue = &BUF_Text[30];
+2011   1              pText = POST_Record[64].PValue;
+2012   1              pText->CurrValue = postbuf_text30[0];
+2013   1              pText->UserValue = postbuf_text30[1];
+2014   1              pText->Offset = 2955;
+2015   1              pText->DefaultLength = 4;
+2016   1              pText->CurrValue[0] = '1';
+2017   1              pText->CurrValue[1] = '0';
+2018   1              pText->CurrValue[2] = '0';
+2019   1              pText->CurrValue[3] = '"';
+2020   1              pText->CurrLength = 4;
+2021   1      
+2022   1              /* for record 65 */
+2023   1              POST_Record[65].Occupy = 1;
+2024   1              POST_Record[65].PostType = POST_TYPE_TEXT;
+2025   1              POST_Record[65].Name[0] = 'w';
+2026   1              POST_Record[65].Name[1] = 'z';
+2027   1              POST_Record[65].Name[2] = 'r';
+2028   1              POST_Record[65].Name[3] = 't';
+2029   1              POST_Record[65].Name[4] = 's';
+2030   1              POST_Record[65].Name[5] = 't';
+2031   1              POST_Record[65].Name[6] = 'h';
+2032   1              POST_Record[65].Name[7] = 'r';
+2033   1              POST_Record[65].Name[8] = 'e';
+2034   1              POST_Record[65].Name[9] = 's';
+2035   1              POST_Record[65].Name[10] = 'h';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 34  
+
+2036   1              POST_Record[65].Name[11] = 'o';
+2037   1              POST_Record[65].Name[12] = 'l';
+2038   1              POST_Record[65].Name[13] = 'd';
+2039   1              POST_Record[65].NameLen = 14;
+2040   1              POST_Record[65].FileIndex = 14;
+2041   1              POST_Record[65].UpdateSelf = FALSE;
+2042   1              POST_Record[65].PValue = &BUF_Text[31];
+2043   1              pText = POST_Record[65].PValue;
+2044   1              pText->CurrValue = postbuf_text31[0];
+2045   1              pText->UserValue = postbuf_text31[1];
+2046   1              pText->Offset = 3283;
+2047   1              pText->DefaultLength = 5;
+2048   1              pText->CurrValue[0] = '2';
+2049   1              pText->CurrValue[1] = '4';
+2050   1              pText->CurrValue[2] = '3';
+2051   1              pText->CurrValue[3] = '2';
+2052   1              pText->CurrValue[4] = '"';
+2053   1              pText->CurrLength = 5;
+2054   1      
+2055   1              /* for record 66 */
+2056   1              POST_Record[66].Occupy = 1;
+2057   1              POST_Record[66].PostType = POST_TYPE_SELECT;
+2058   1              POST_Record[66].Name[0] = 'w';
+2059   1              POST_Record[66].Name[1] = 'z';
+2060   1              POST_Record[66].Name[2] = 'a';
+2061   1              POST_Record[66].Name[3] = 'u';
+2062   1              POST_Record[66].Name[4] = 't';
+2063   1              POST_Record[66].Name[5] = 'o';
+2064   1              POST_Record[66].Name[6] = 'p';
+2065   1              POST_Record[66].Name[7] = 'w';
+2066   1              POST_Record[66].Name[8] = 'r';
+2067   1              POST_Record[66].Name[9] = 'c';
+2068   1              POST_Record[66].Name[10] = 't';
+2069   1              POST_Record[66].Name[11] = 'r';
+2070   1              POST_Record[66].Name[12] = 'l';
+2071   1              POST_Record[66].NameLen = 13;
+2072   1              POST_Record[66].FileIndex = 14;
+2073   1              POST_Record[66].UpdateSelf = FALSE;
+2074   1              POST_Record[66].PValue = &BUF_Select[22];
+2075   1              pSelect = POST_Record[66].PValue;
+2076   1              pSelect->Offset[0] = 3479;
+2077   1              pSelect->Offset[1] = 3538;
+2078   1              pSelect->Count = 2;
+2079   1              pSelect->DefaultSet = 0;
+2080   1              pSelect->CurrentSet = 0;
+2081   1              pSelect->UserSet = 0;
+2082   1      
+2083   1              /* for record 67 */
+2084   1              POST_Record[67].Occupy = 1;
+2085   1              POST_Record[67].PostType = POST_TYPE_SELECT;
+2086   1              POST_Record[67].Name[0] = 'w';
+2087   1              POST_Record[67].Name[1] = 'z';
+2088   1              POST_Record[67].Name[2] = 'p';
+2089   1              POST_Record[67].Name[3] = 'r';
+2090   1              POST_Record[67].Name[4] = 'o';
+2091   1              POST_Record[67].Name[5] = 't';
+2092   1              POST_Record[67].Name[6] = 'f';
+2093   1              POST_Record[67].Name[7] = 'r';
+2094   1              POST_Record[67].Name[8] = 'm';
+2095   1              POST_Record[67].Name[9] = '_';
+2096   1              POST_Record[67].Name[10] = 't';
+2097   1              POST_Record[67].Name[11] = 'y';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 35  
+
+2098   1              POST_Record[67].Name[12] = 'p';
+2099   1              POST_Record[67].Name[13] = 'e';
+2100   1              POST_Record[67].NameLen = 14;
+2101   1              POST_Record[67].FileIndex = 14;
+2102   1              POST_Record[67].UpdateSelf = FALSE;
+2103   1              POST_Record[67].PValue = &BUF_Select[23];
+2104   1              pSelect = POST_Record[67].PValue;
+2105   1              pSelect->Offset[0] = 3742;
+2106   1              pSelect->Offset[1] = 3797;
+2107   1              pSelect->Count = 2;
+2108   1              pSelect->DefaultSet = 0;
+2109   1              pSelect->CurrentSet = 0;
+2110   1              pSelect->UserSet = 0;
+2111   1      
+2112   1              /* for record 68 */
+2113   1              POST_Record[68].Occupy = 1;
+2114   1              POST_Record[68].PostType = POST_TYPE_SUBMIT;
+2115   1              POST_Record[68].Name[0] = 'N';
+2116   1              POST_Record[68].Name[1] = 'e';
+2117   1              POST_Record[68].Name[2] = 'x';
+2118   1              POST_Record[68].Name[3] = 't';
+2119   1              POST_Record[68].NameLen = 4;
+2120   1              POST_Record[68].FileIndex = 0xff;
+2121   1              POST_Record[68].UpdateSelf = FALSE;
+2122   1              POST_Record[68].PValue = &BUF_Submit[7];
+2123   1              pSubmit = POST_Record[68].PValue;
+2124   1              pSubmit->Value[0] = 'N';
+2125   1              pSubmit->Value[1] = 'e';
+2126   1              pSubmit->Value[2] = 'x';
+2127   1              pSubmit->Value[3] = 't';
+2128   1              pSubmit->DefaultVlaueLen = 4;
+2129   1              pSubmit->IsApply = 1;
+2130   1      
+2131   1              /* for record 69 */
+2132   1              POST_Record[69].Occupy = 1;
+2133   1              POST_Record[69].PostType = POST_TYPE_SUBMIT;
+2134   1              POST_Record[69].Name[0] = 'B';
+2135   1              POST_Record[69].Name[1] = 'a';
+2136   1              POST_Record[69].Name[2] = 'c';
+2137   1              POST_Record[69].Name[3] = 'k';
+2138   1              POST_Record[69].NameLen = 4;
+2139   1              POST_Record[69].FileIndex = 0xff;
+2140   1              POST_Record[69].UpdateSelf = FALSE;
+2141   1              POST_Record[69].PValue = &BUF_Submit[8];
+2142   1              pSubmit = POST_Record[69].PValue;
+2143   1              pSubmit->Value[0] = 'B';
+2144   1              pSubmit->Value[1] = 'a';
+2145   1              pSubmit->Value[2] = 'c';
+2146   1              pSubmit->Value[3] = 'k';
+2147   1              pSubmit->DefaultVlaueLen = 4;
+2148   1              pSubmit->IsApply = 1;
+2149   1      
+2150   1              /* for record 70 */
+2151   1              POST_Record[70].Occupy = 1;
+2152   1              POST_Record[70].PostType = POST_TYPE_RADIO;
+2153   1              POST_Record[70].Name[0] = 'w';
+2154   1              POST_Record[70].Name[1] = 'e';
+2155   1              POST_Record[70].Name[2] = 'p';
+2156   1              POST_Record[70].NameLen = 3;
+2157   1              POST_Record[70].FileIndex = 15;
+2158   1              POST_Record[70].UpdateSelf = FALSE;
+2159   1              POST_Record[70].PValue = &BUF_Radio[1];
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 36  
+
+2160   1              pRadio = POST_Record[70].PValue;
+2161   1              pRadio->Offset[0] = 1357;
+2162   1              pRadio->Value[0][0] = '0';
+2163   1              pRadio->Length[0] = 1;
+2164   1              pRadio->Offset[1] = 1501;
+2165   1              pRadio->Value[1][0] = '1';
+2166   1              pRadio->Length[1] = 1;
+2167   1              pRadio->Offset[2] = 1650;
+2168   1              pRadio->Value[2][0] = '2';
+2169   1              pRadio->Length[2] = 1;
+2170   1              pRadio->Count = 3;
+2171   1              pRadio->DefaultSet = 2;
+2172   1              pRadio->CurrentSet = 2;
+2173   1              pRadio->UserSet = 2;
+2174   1      
+2175   1              /* for record 71 */
+2176   1              POST_Record[71].Occupy = 1;
+2177   1              POST_Record[71].PostType = POST_TYPE_SELECT;
+2178   1              POST_Record[71].Name[0] = 'w';
+2179   1              POST_Record[71].Name[1] = 'z';
+2180   1              POST_Record[71].Name[2] = 'n';
+2181   1              POST_Record[71].Name[3] = 'e';
+2182   1              POST_Record[71].Name[4] = 't';
+2183   1              POST_Record[71].Name[5] = 'w';
+2184   1              POST_Record[71].Name[6] = 'o';
+2185   1              POST_Record[71].Name[7] = 'r';
+2186   1              POST_Record[71].Name[8] = 'k';
+2187   1              POST_Record[71].Name[9] = 'm';
+2188   1              POST_Record[71].Name[10] = 'o';
+2189   1              POST_Record[71].Name[11] = 'd';
+2190   1              POST_Record[71].Name[12] = 'e';
+2191   1              POST_Record[71].NameLen = 13;
+2192   1              POST_Record[71].FileIndex = 18;
+2193   1              POST_Record[71].UpdateSelf = FALSE;
+2194   1              POST_Record[71].PValue = &BUF_Select[24];
+2195   1              pSelect = POST_Record[71].PValue;
+2196   1              pSelect->Offset[0] = 1517;
+2197   1              pSelect->Offset[1] = 1585;
+2198   1              pSelect->Count = 2;
+2199   1              pSelect->DefaultSet = 0;
+2200   1              pSelect->CurrentSet = 0;
+2201   1              pSelect->UserSet = 0;
+2202   1      
+2203   1              /* for record 72 */
+2204   1              POST_Record[72].Occupy = 1;
+2205   1              POST_Record[72].PostType = POST_TYPE_SELECT;
+2206   1              POST_Record[72].Name[0] = 'w';
+2207   1              POST_Record[72].Name[1] = 'z';
+2208   1              POST_Record[72].Name[2] = 'c';
+2209   1              POST_Record[72].Name[3] = 'h';
+2210   1              POST_Record[72].Name[4] = 'a';
+2211   1              POST_Record[72].Name[5] = 'n';
+2212   1              POST_Record[72].Name[6] = 'n';
+2213   1              POST_Record[72].Name[7] = 'e';
+2214   1              POST_Record[72].Name[8] = 'l';
+2215   1              POST_Record[72].NameLen = 9;
+2216   1              POST_Record[72].FileIndex = 18;
+2217   1              POST_Record[72].UpdateSelf = FALSE;
+2218   1              POST_Record[72].PValue = &BUF_Select[25];
+2219   1              pSelect = POST_Record[72].PValue;
+2220   1              pSelect->Offset[0] = 1772;
+2221   1              pSelect->Offset[1] = 1830;
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 37  
+
+2222   1              pSelect->Offset[2] = 1876;
+2223   1              pSelect->Offset[3] = 1922;
+2224   1              pSelect->Offset[4] = 1968;
+2225   1              pSelect->Offset[5] = 2014;
+2226   1              pSelect->Offset[6] = 2060;
+2227   1              pSelect->Offset[7] = 2106;
+2228   1              pSelect->Offset[8] = 2152;
+2229   1              pSelect->Offset[9] = 2198;
+2230   1              pSelect->Offset[10] = 2244;
+2231   1              pSelect->Offset[11] = 2291;
+2232   1              pSelect->Count = 12;
+2233   1              pSelect->DefaultSet = 0;
+2234   1              pSelect->CurrentSet = 0;
+2235   1              pSelect->UserSet = 0;
+2236   1      
+2237   1              /* for record 73 */
+2238   1              POST_Record[73].Occupy = 1;
+2239   1              POST_Record[73].PostType = POST_TYPE_TEXT;
+2240   1              POST_Record[73].Name[0] = 'w';
+2241   1              POST_Record[73].Name[1] = 'z';
+2242   1              POST_Record[73].Name[2] = 's';
+2243   1              POST_Record[73].Name[3] = 's';
+2244   1              POST_Record[73].Name[4] = 'i';
+2245   1              POST_Record[73].Name[5] = 'd';
+2246   1              POST_Record[73].NameLen = 6;
+2247   1              POST_Record[73].FileIndex = 18;
+2248   1              POST_Record[73].UpdateSelf = FALSE;
+2249   1              POST_Record[73].PValue = &BUF_Text[32];
+2250   1              pText = POST_Record[73].PValue;
+2251   1              pText->CurrValue = postbuf_text32[0];
+2252   1              pText->UserValue = postbuf_text32[1];
+2253   1              pText->Offset = 2481;
+2254   1              pText->DefaultLength = 8;
+2255   1              pText->CurrValue[0] = 'x';
+2256   1              pText->CurrValue[1] = 'l';
+2257   1              pText->CurrValue[2] = 'w';
+2258   1              pText->CurrValue[3] = 't';
+2259   1              pText->CurrValue[4] = 'e';
+2260   1              pText->CurrValue[5] = 's';
+2261   1              pText->CurrValue[6] = 't';
+2262   1              pText->CurrValue[7] = '"';
+2263   1              pText->CurrLength = 8;
+2264   1      
+2265   1              /* for record 74 */
+2266   1              POST_Record[74].Occupy = 1;
+2267   1              POST_Record[74].PostType = POST_TYPE_SELECT;
+2268   1              POST_Record[74].Name[0] = 'w';
+2269   1              POST_Record[74].Name[1] = 'z';
+2270   1              POST_Record[74].Name[2] = 's';
+2271   1              POST_Record[74].Name[3] = 'c';
+2272   1              POST_Record[74].Name[4] = 'r';
+2273   1              POST_Record[74].Name[5] = 't';
+2274   1              POST_Record[74].Name[6] = 'm';
+2275   1              POST_Record[74].Name[7] = 'o';
+2276   1              POST_Record[74].Name[8] = 'd';
+2277   1              POST_Record[74].Name[9] = 'e';
+2278   1              POST_Record[74].NameLen = 10;
+2279   1              POST_Record[74].FileIndex = 18;
+2280   1              POST_Record[74].UpdateSelf = FALSE;
+2281   1              POST_Record[74].PValue = &BUF_Select[26];
+2282   1              pSelect = POST_Record[74].PValue;
+2283   1              pSelect->Offset[0] = 2780;
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 38  
+
+2284   1              pSelect->Offset[1] = 2845;
+2285   1              pSelect->Offset[2] = 2896;
+2286   1              pSelect->Offset[3] = 2948;
+2287   1              pSelect->Offset[4] = 2997;
+2288   1              pSelect->Count = 5;
+2289   1              pSelect->DefaultSet = 0;
+2290   1              pSelect->CurrentSet = 0;
+2291   1              pSelect->UserSet = 0;
+2292   1      
+2293   1              /* for record 75 */
+2294   1              POST_Record[75].Occupy = 1;
+2295   1              POST_Record[75].PostType = POST_TYPE_SUBMIT;
+2296   1              POST_Record[75].Name[0] = 'F';
+2297   1              POST_Record[75].Name[1] = 'i';
+2298   1              POST_Record[75].Name[2] = 'n';
+2299   1              POST_Record[75].Name[3] = 'i';
+2300   1              POST_Record[75].Name[4] = 's';
+2301   1              POST_Record[75].Name[5] = 'h';
+2302   1              POST_Record[75].NameLen = 6;
+2303   1              POST_Record[75].FileIndex = 0xff;
+2304   1              POST_Record[75].UpdateSelf = FALSE;
+2305   1              POST_Record[75].PValue = &BUF_Submit[9];
+2306   1              pSubmit = POST_Record[75].PValue;
+2307   1              pSubmit->Value[0] = 'F';
+2308   1              pSubmit->Value[1] = 'i';
+2309   1              pSubmit->Value[2] = 'n';
+2310   1              pSubmit->Value[3] = 'i';
+2311   1              pSubmit->Value[4] = 's';
+2312   1              pSubmit->Value[5] = 'h';
+2313   1              pSubmit->DefaultVlaueLen = 6;
+2314   1              pSubmit->IsApply = 1;
+2315   1      
+2316   1              /* for record 76 */
+2317   1              POST_Record[76].Occupy = 1;
+2318   1              POST_Record[76].PostType = POST_TYPE_SELECT;
+2319   1              POST_Record[76].Name[0] = 'w';
+2320   1              POST_Record[76].Name[1] = 'z';
+2321   1              POST_Record[76].Name[2] = 'k';
+2322   1              POST_Record[76].Name[3] = 'e';
+2323   1              POST_Record[76].Name[4] = 'y';
+2324   1              POST_Record[76].Name[5] = 'l';
+2325   1              POST_Record[76].Name[6] = 'e';
+2326   1              POST_Record[76].Name[7] = 'n';
+2327   1              POST_Record[76].Name[8] = 'g';
+2328   1              POST_Record[76].Name[9] = 't';
+2329   1              POST_Record[76].Name[10] = 'h';
+2330   1              POST_Record[76].NameLen = 11;
+2331   1              POST_Record[76].FileIndex = 19;
+2332   1              POST_Record[76].UpdateSelf = FALSE;
+2333   1              POST_Record[76].PValue = &BUF_Select[27];
+2334   1              pSelect = POST_Record[76].PValue;
+2335   1              pSelect->Offset[0] = 1427;
+2336   1              pSelect->Offset[1] = 1486;
+2337   1              pSelect->Count = 2;
+2338   1              pSelect->DefaultSet = 0;
+2339   1              pSelect->CurrentSet = 0;
+2340   1              pSelect->UserSet = 0;
+2341   1      
+2342   1              /* for record 77 */
+2343   1              POST_Record[77].Occupy = 1;
+2344   1              POST_Record[77].PostType = POST_TYPE_SELECT;
+2345   1              POST_Record[77].Name[0] = 'w';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 39  
+
+2346   1              POST_Record[77].Name[1] = 'z';
+2347   1              POST_Record[77].Name[2] = 'k';
+2348   1              POST_Record[77].Name[3] = 'e';
+2349   1              POST_Record[77].Name[4] = 'y';
+2350   1              POST_Record[77].Name[5] = 'i';
+2351   1              POST_Record[77].Name[6] = 'n';
+2352   1              POST_Record[77].Name[7] = 'd';
+2353   1              POST_Record[77].Name[8] = 'e';
+2354   1              POST_Record[77].Name[9] = 'x';
+2355   1              POST_Record[77].NameLen = 10;
+2356   1              POST_Record[77].FileIndex = 19;
+2357   1              POST_Record[77].UpdateSelf = FALSE;
+2358   1              POST_Record[77].PValue = &BUF_Select[28];
+2359   1              pSelect = POST_Record[77].PValue;
+2360   1              pSelect->Offset[0] = 1676;
+2361   1              pSelect->Offset[1] = 1739;
+2362   1              pSelect->Offset[2] = 1793;
+2363   1              pSelect->Offset[3] = 1847;
+2364   1              pSelect->Count = 4;
+2365   1              pSelect->DefaultSet = 0;
+2366   1              pSelect->CurrentSet = 0;
+2367   1              pSelect->UserSet = 0;
+2368   1      
+2369   1              /* for record 78 */
+2370   1              POST_Record[78].Occupy = 1;
+2371   1              POST_Record[78].PostType = POST_TYPE_TEXT;
+2372   1              POST_Record[78].Name[0] = 'w';
+2373   1              POST_Record[78].Name[1] = 'z';
+2374   1              POST_Record[78].Name[2] = 'k';
+2375   1              POST_Record[78].Name[3] = 'e';
+2376   1              POST_Record[78].Name[4] = 'y';
+2377   1              POST_Record[78].Name[5] = 'i';
+2378   1              POST_Record[78].Name[6] = 'n';
+2379   1              POST_Record[78].Name[7] = 'd';
+2380   1              POST_Record[78].Name[8] = 'e';
+2381   1              POST_Record[78].Name[9] = 'x';
+2382   1              POST_Record[78].Name[10] = '0';
+2383   1              POST_Record[78].NameLen = 11;
+2384   1              POST_Record[78].FileIndex = 19;
+2385   1              POST_Record[78].UpdateSelf = FALSE;
+2386   1              POST_Record[78].PValue = &BUF_Text[33];
+2387   1              pText = POST_Record[78].PValue;
+2388   1              pText->CurrValue = postbuf_text33[0];
+2389   1              pText->UserValue = postbuf_text33[1];
+2390   1              pText->Offset = 2196;
+2391   1              pText->DefaultLength = 1;
+2392   1              pText->CurrValue[0] = '"';
+2393   1              pText->CurrLength = 1;
+2394   1      
+2395   1              /* for record 79 */
+2396   1              POST_Record[79].Occupy = 1;
+2397   1              POST_Record[79].PostType = POST_TYPE_TEXT;
+2398   1              POST_Record[79].Name[0] = 'w';
+2399   1              POST_Record[79].Name[1] = 'z';
+2400   1              POST_Record[79].Name[2] = 'k';
+2401   1              POST_Record[79].Name[3] = 'e';
+2402   1              POST_Record[79].Name[4] = 'y';
+2403   1              POST_Record[79].Name[5] = 'i';
+2404   1              POST_Record[79].Name[6] = 'n';
+2405   1              POST_Record[79].Name[7] = 'd';
+2406   1              POST_Record[79].Name[8] = 'e';
+2407   1              POST_Record[79].Name[9] = 'x';
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 40  
+
+2408   1              POST_Record[79].Name[10] = '1';
+2409   1              POST_Record[79].NameLen = 11;
+2410   1              POST_Record[79].FileIndex = 19;
+2411   1              POST_Record[79].UpdateSelf = FALSE;
+2412   1              POST_Record[79].PValue = &BUF_Text[34];
+2413   1              pText = POST_Record[79].PValue;
+2414   1              pText->CurrValue = postbuf_text34[0];
+2415   1              pText->UserValue = postbuf_text34[1];
+2416   1              pText->Offset = 2386;
+2417   1              pText->DefaultLength = 1;
+2418   1              pText->CurrValue[0] = '"';
+2419   1              pText->CurrLength = 1;
+2420   1      
+2421   1              /* for record 80 */
+2422   1              POST_Record[80].Occupy = 1;
+2423   1              POST_Record[80].PostType = POST_TYPE_TEXT;
+2424   1              POST_Record[80].Name[0] = 'w';
+2425   1              POST_Record[80].Name[1] = 'z';
+2426   1              POST_Record[80].Name[2] = 'k';
+2427   1              POST_Record[80].Name[3] = 'e';
+2428   1              POST_Record[80].Name[4] = 'y';
+2429   1              POST_Record[80].Name[5] = 'i';
+2430   1              POST_Record[80].Name[6] = 'n';
+2431   1              POST_Record[80].Name[7] = 'd';
+2432   1              POST_Record[80].Name[8] = 'e';
+2433   1              POST_Record[80].Name[9] = 'x';
+2434   1              POST_Record[80].Name[10] = '2';
+2435   1              POST_Record[80].NameLen = 11;
+2436   1              POST_Record[80].FileIndex = 19;
+2437   1              POST_Record[80].UpdateSelf = FALSE;
+2438   1              POST_Record[80].PValue = &BUF_Text[35];
+2439   1              pText = POST_Record[80].PValue;
+2440   1              pText->CurrValue = postbuf_text35[0];
+2441   1              pText->UserValue = postbuf_text35[1];
+2442   1              pText->Offset = 2576;
+2443   1              pText->DefaultLength = 1;
+2444   1              pText->CurrValue[0] = '"';
+2445   1              pText->CurrLength = 1;
+2446   1      
+2447   1              /* for record 81 */
+2448   1              POST_Record[81].Occupy = 1;
+2449   1              POST_Record[81].PostType = POST_TYPE_TEXT;
+2450   1              POST_Record[81].Name[0] = 'w';
+2451   1              POST_Record[81].Name[1] = 'z';
+2452   1              POST_Record[81].Name[2] = 'k';
+2453   1              POST_Record[81].Name[3] = 'e';
+2454   1              POST_Record[81].Name[4] = 'y';
+2455   1              POST_Record[81].Name[5] = 'i';
+2456   1              POST_Record[81].Name[6] = 'n';
+2457   1              POST_Record[81].Name[7] = 'd';
+2458   1              POST_Record[81].Name[8] = 'e';
+2459   1              POST_Record[81].Name[9] = 'x';
+2460   1              POST_Record[81].Name[10] = '3';
+2461   1              POST_Record[81].NameLen = 11;
+2462   1              POST_Record[81].FileIndex = 19;
+2463   1              POST_Record[81].UpdateSelf = FALSE;
+2464   1              POST_Record[81].PValue = &BUF_Text[36];
+2465   1              pText = POST_Record[81].PValue;
+2466   1              pText->CurrValue = postbuf_text36[0];
+2467   1              pText->UserValue = postbuf_text36[1];
+2468   1              pText->Offset = 2766;
+2469   1              pText->DefaultLength = 1;
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 41  
+
+2470   1              pText->CurrValue[0] = '"';
+2471   1              pText->CurrLength = 1;
+2472   1      
+2473   1              /* for record 82 */
+2474   1              POST_Record[82].Occupy = 1;
+2475   1              POST_Record[82].PostType = POST_TYPE_TEXT;
+2476   1              POST_Record[82].Name[0] = 'w';
+2477   1              POST_Record[82].Name[1] = 'z';
+2478   1              POST_Record[82].Name[2] = 'a';
+2479   1              POST_Record[82].Name[3] = 'e';
+2480   1              POST_Record[82].Name[4] = 's';
+2481   1              POST_Record[82].NameLen = 5;
+2482   1              POST_Record[82].FileIndex = 20;
+2483   1              POST_Record[82].UpdateSelf = FALSE;
+2484   1              POST_Record[82].PValue = &BUF_Text[37];
+2485   1              pText = POST_Record[82].PValue;
+2486   1              pText->CurrValue = postbuf_text37[0];
+2487   1              pText->UserValue = postbuf_text37[1];
+2488   1              pText->Offset = 1373;
+2489   1              pText->DefaultLength = 1;
+2490   1              pText->CurrValue[0] = '"';
+2491   1              pText->CurrLength = 1;
+2492   1      
+2493   1      }
+*** WARNING C280 IN LINE 135 OF ..\src\web_page\filesys.c: 'pTag': unreferenced local variable
+2494          
+2495          /*
+2496           * ----------------------------------------------------------------------------
+2497           * Function Name: FSYS_FindFile
+2498           * Purpose: 
+2499           * Params:
+2500           * Returns:
+2501           * Note:
+2502           * ----------------------------------------------------------------------------
+2503           */
+2504          U8_T FSYS_FindFile(U8_T XDATA* pFName)
+2505          {
+2506   1              U8_T            index, find;
+2507   1              U8_T *pSour;
+2508   1              U8_T *pDesc;
+2509   1      
+2510   1              for (index = 0; index < MAX_STORE_FILE_NUM; index++)
+2511   1              {
+2512   2                      if (!FSYS_Manage[index].Occupy)
+2513   2                              continue;
+2514   2      
+2515   2                      pSour = pFName;
+2516   2                      pDesc = FSYS_Manage[index].FName;
+2517   2                      find = 1;
+2518   2                      while (*pDesc != 0)
+2519   2                      {
+2520   3                              if (*pSour != *pDesc)
+2521   3                              {
+2522   4                                      find = 0;
+2523   4                                      break;
+2524   4                              }
+2525   3                              pSour++;
+2526   3                              pDesc++;
+2527   3                      }
+2528   2                      if (find == 1)
+2529   2                              return index;
+2530   2              }
+C51 COMPILER V9.05   FILESYS                                                               04/09/2012 13:44:24 PAGE 42  
+
+2531   1              return index;
+2532   1      }
+2533          
+2534          
+2535          /* End of filesys.c */
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =  26196    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   5438      15
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =    902    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  1 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,546 @@
+C51 COMPILER V9.05   DNSC                                                                  03/02/2012 02:01:40 PAGE 1   
+
+
+C51 COMPILER V9.05, COMPILATION OF MODULE DNSC
+OBJECT MODULE PLACED IN .\dnsc.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE ..\src\mdnsc\dnsc.c LARGE OMF2 ROM(D16M) BROWSE INTVECTOR(0X8020) INCDIR(..
+                    -\src\main;..\src\mcpu;..\src\mswdma;..\src\uart0;..\src\mmstimer;..\src\mwif;..\src\madapter;..\src\mtcpip;..\src\mping;
+                    -..\src\mpppoe;..\src\si2c;..\src\mdnsc;..\src\mconsole;..\src\mtelnet;..\src\meeprom;..\src\mmac;..\src\mdhcpc;..\src\mh
+                    -ttp;..\src\mgs2wifi;..\src\mhsuart;..\src\msmtpc;..\src\web_page;..\src\mdhcps;..\src\mdebug;..\src\counter) DEFINE(Runt
+                    -imeCodeAt32KH) VARBANKING DEBUG PRINT(.\dnsc.lst) OBJECT(.\dnsc.obj)
+
+line level    source
+
+   1          
+   2          #define DNSC_DEBUG              1
+   3          
+   4          /* INCLUDE FILE DECLARATIONS */
+   5          #include "main.h"
+   6          
+   7          #if (INCLUDE_DNS_CLIENT)
+   8          #include "dnsc.h"
+   9          #include "tcpip.h"
+  10          #include "mstimer.h"
+  11          #if (DNSC_DEBUG)
+  12          #include "uart0.h"
+  13          #include "printd.h"
+  14          #endif
+  15          #include <stdio.h>
+  16          #include <string.h>
+  17          /* NAMING CONSTANT DECLARATIONS */
+  18          
+  19          /* GLOBAL VARIABLES DECLARATIONS */
+  20          
+  21          /* LOCAL VARIABLES DECLARATIONS */
+  22          static DNSC_INFO dnscInfo;
+  23          
+  24          /* LOCAL SUBPROGRAM DECLARATIONS */
+  25          static void dnsc_Event(U8_T, U8_T);
+  26          static void dnsc_Receive(U8_T XDATA*, U16_T, U8_T);
+  27          static U8_T dnsc_Send(U8_T InterUdpId, char *pName, U32_T dnsIp);
+  28          static U8_T dnsc_PrepareQueryPacket(S8_T *pName, U8_T *pBuf);
+  29          static U32_T dnsc_ParseResponsePacket(U8_T *pBuf, U16_T bufLen);
+  30          
+  31          /*
+  32           * ----------------------------------------------------------------------------
+  33           * Function Name: DNSC_Init()
+  34           * Purpose:
+  35           * Params:
+  36           * Returns:
+  37           * Note:
+  38           * ----------------------------------------------------------------------------
+  39           */
+  40          void DNSC_Init(void)
+  41          {
+  42   1              memset((U8_T*)&dnscInfo, 0 , sizeof(DNSC_INFO));
+  43   1              dnscInfo.InterAppID = TCPIP_Bind(NULL, dnsc_Event, dnsc_Receive);
+  44   1              printd("DNS client Init ok.\n\r");
+  45   1              
+  46   1      } /* End of DNSC_Init() */
+  47          
+  48          /*
+  49           * ----------------------------------------------------------------------------
+  50           * Function Name: dnsc_Event
+  51           * Purpose: 
+C51 COMPILER V9.05   DNSC                                                                  03/02/2012 02:01:40 PAGE 2   
+
+  52           * Params:
+  53           * Returns:
+  54           * Note:
+  55           * ----------------------------------------------------------------------------
+  56           */
+  57          static void dnsc_Event(U8_T id, U8_T event)
+  58          {
+  59   1              if (id) return;
+  60   1      
+  61   1              if (event == TCPIP_CONNECT_CANCEL)
+  62   1                      dnscInfo.TaskState = DNSC_TASK_CLOSE;
+  63   1      
+  64   1      } /* End of dnsc_Event() */
+  65          
+  66          /*
+  67           * ----------------------------------------------------------------------------
+  68           * Function Name: dnsc_Receive
+  69           * Purpose: 
+  70           * Params:
+  71           * Returns:
+  72           * Note:
+  73           * ----------------------------------------------------------------------------
+  74           */
+  75          static void dnsc_Receive(U8_T XDATA* pData, U16_T length, U8_T id)
+  76          {
+  77   1              if ((dnscInfo.TaskState != DNSC_TASK_WAIT_RESPONSE) && id)
+  78   1                      return;
+  79   1      
+  80   1              dnscInfo.QueryIP = dnsc_ParseResponsePacket(pData, length);
+  81   1              dnscInfo.TaskState = DNSC_TASK_RESPONSE;
+  82   1      
+  83   1      } /* End of dnsc_Receive() */
+  84          
+  85          /*
+  86           * ----------------------------------------------------------------------------
+  87           * Function Name: dnsc_Send
+  88           * Purpose: 
+  89           * Params:
+  90           * Returns:
+  91           * Note:
+  92           * ----------------------------------------------------------------------------
+  93           */
+  94          static U8_T dnsc_Send(U8_T InterUdpId, S8_T *pName, U32_T dnsIp)
+  95          {
+  96   1              U8_T pkt[512];
+  97   1              U8_T len;
+  98   1              U8_T i;
+  99   1              char strIp[16] = {0};
+ 100   1      
+ 101   1              if(strlen(pName) <= 255)
+ 102   1              {       
+ 103   2                      len = dnsc_PrepareQueryPacket(pName, &pkt[0]);
+ 104   2              
+ 105   2                      i = sprintf(strIp, "%d.", ((dnsIp >> 24) & 0x000000FF));
+ 106   2                      i += sprintf(strIp + i, "%d.", ((dnsIp >> 16) & 0x000000FF));
+ 107   2                      i += sprintf(strIp + i, "%d.", ((dnsIp >> 8) & 0x000000FF));
+ 108   2                      sprintf(strIp + i, "%d", (dnsIp & 0x000000FF));
+ 109   2              
+ 110   2                      TCPIP_UdpSend(InterUdpId, 0, 0, pkt, len);
+ 111   2                      return 0;
+ 112   2              }
+ 113   1              return 1;
+C51 COMPILER V9.05   DNSC                                                                  03/02/2012 02:01:40 PAGE 3   
+
+ 114   1      } /* End of dnsc_Send() */
+ 115          
+ 116          /*
+ 117           * ----------------------------------------------------------------------------
+ 118           * Function Name: dnsc_PrepareQueryPacket
+ 119           * Purpose: 
+ 120           * Params:
+ 121           * Returns:
+ 122           * Note:
+ 123           * ----------------------------------------------------------------------------
+ 124           */
+ 125          static U8_T dnsc_PrepareQueryPacket(S8_T *pName, U8_T *pBuf)
+ 126          {
+ 127   1              U8_T DotOffset, DataOffset, DataCnt, NameLen = strlen(pName);
+ 128   1              DNSC_HEADER *pDNSC_HD;
+ 129   1              DNSC_QUESTION *pDNSC_Q;
+ 130   1      
+ 131   1              // Prepare DNS header
+ 132   1              pDNSC_HD = (DNSC_HEADER*)pBuf;
+ 133   1              pDNSC_HD->ID = htons(0xABCD);
+ 134   1              pDNSC_HD->Flag = DNS_FLAG_RD;
+ 135   1              pDNSC_HD->QDCount = htons(0x0001);
+ 136   1              pDNSC_HD->ANCount = htons(0x0000);
+ 137   1              pDNSC_HD->NSCount = htons(0x0000);
+ 138   1              pDNSC_HD->ARCount = htons(0x0000);
+ 139   1              pBuf = pBuf + sizeof(DNSC_HEADER);
+ 140   1      
+ 141   1              // Prepare Question field
+ 142   1              DotOffset = 0;
+ 143   1              DataCnt = 0;
+ 144   1              for (DataOffset = 0 ; DataOffset < NameLen ; DataOffset ++)//Standard DNS name notation.
+ 145   1              {
+ 146   2                      if (pName[DataOffset] == '.')
+ 147   2                      {
+ 148   3                              pBuf[DotOffset] = DataCnt;
+ 149   3                              DataCnt = 0;                    
+ 150   3                              DotOffset = DataOffset + 1;
+ 151   3                      }
+ 152   2                      else
+ 153   2                      {
+ 154   3                              pBuf[DataOffset + 1] = pName[DataOffset];
+ 155   3                              DataCnt ++;
+ 156   3              }
+ 157   2              }
+ 158   1              pBuf[DotOffset] = DataCnt;      
+ 159   1              pBuf[DataOffset + 1] = 0;
+ 160   1      
+ 161   1              pDNSC_Q = (DNSC_QUESTION*)&(pBuf[DataOffset + 2]);
+ 162   1              pDNSC_Q->Type = htons(DNS_TYPE_A);
+ 163   1              pDNSC_Q->Class = htons(DNS_CLASS_IN);
+ 164   1      
+ 165   1              return (NameLen + 2 + sizeof(DNSC_HEADER) + 4);
+ 166   1      } /* End of dnsc_PrepareQueryPacket() */
+ 167          
+ 168          /*
+ 169           * ----------------------------------------------------------------------------
+ 170           * Function Name: dnsc_ParseResponsePacket
+ 171           * Purpose: 
+ 172           * Params:
+ 173           * Returns:
+ 174           * Note:
+ 175           * ----------------------------------------------------------------------------
+C51 COMPILER V9.05   DNSC                                                                  03/02/2012 02:01:40 PAGE 4   
+
+ 176           */
+ 177          static U32_T dnsc_ParseResponsePacket(U8_T *pBuf, U16_T bufLen)
+ 178          {       
+ 179   1              U16_T len;
+ 180   1              U16_T i;
+ 181   1              U32_T ip = 0x00000000;
+ 182   1              DNSC_HEADER *pDNSC_HD;
+ 183   1              DNSC_ANSWER *pDNSC_A;   
+ 184   1      
+ 185   1              if (bufLen < sizeof(DNSC_HEADER))
+ 186   1              {
+ 187   2                      return ip;
+ 188   2              }
+ 189   1      
+ 190   1              pDNSC_HD = (DNSC_HEADER*)pBuf;
+ 191   1              len = sizeof(DNSC_HEADER);
+ 192   1              
+ 193   1              if (((pDNSC_HD->Flag) & DNS_FLAG_RCODE) == 0) // No error
+ 194   1              {
+ 195   2                      if (pDNSC_HD->QDCount > 0)
+ 196   2                      {
+ 197   3                              for (i = 0; i < pDNSC_HD->QDCount; i++)
+ 198   3                              {
+ 199   4                                      // Handle QDCOUNT field at here
+ 200   4      
+ 201   4                                      while (*(pBuf + len++) != 0)
+ 202   4                                      {
+ 203   5                                              // Handle QNAME field at here
+ 204   5                                              // ...                                  
+ 205   5                                      }
+ 206   4                              
+ 207   4                                      // Handle QTYPE and QCLASS fields at here
+ 208   4                                      // ...
+ 209   4                                      len += sizeof(DNSC_QUESTION);
+ 210   4                              }
+ 211   3                      }
+ 212   2      
+ 213   2                      if (pDNSC_HD->ANCount > 0)
+ 214   2                      {
+ 215   3                              for (i = 0; i < pDNSC_HD->ANCount; i++)
+ 216   3                              {
+ 217   4                                      // Handle ANCOUNT field at here
+ 218   4      
+ 219   4                                      // Currently only handles first valid answer
+ 220   4                                      pDNSC_A = (DNSC_ANSWER*)(pBuf + len);
+ 221   4                                      if ((pDNSC_A->Type == DNS_TYPE_A) && (pDNSC_A->Class == DNS_CLASS_IN))
+ 222   4                                      {                                               
+ 223   5                                              if (pDNSC_A->ResurLen == 4)
+ 224   5                                              {                                                                       
+ 225   6                                                      ip = ((((U32_T)pDNSC_A->Resur[0] << 16) & 0xFFFF0000) + 
+ 226   6                                                                ((U32_T)pDNSC_A->Resur[1] & 0x0000FFFF));
+ 227   6                                              }
+ 228   5                                      }
+ 229   4                                      else
+ 230   4                                      {
+ 231   5                                              // Shift to offset of next answer
+ 232   5                                              // Header length (Bytes)
+ 233   5                                              // Name:2  Type:2  Class:2  TTL:4  Data Len:2  Data:variable     
+ 234   5                                              len += 10; // Length of Name + Type + Class + TTL
+ 235   5                                              len += ((U16_T)((*(pBuf + len) << 8) & 0xFF00) + (U16_T)*(pBuf + len + 1) + 2);                                         
+ 236   5                                      }
+ 237   4                              }
+C51 COMPILER V9.05   DNSC                                                                  03/02/2012 02:01:40 PAGE 5   
+
+ 238   3                      }
+ 239   2      
+ 240   2                      if (pDNSC_HD->ANCount > 0)
+ 241   2                      {
+ 242   3                              // Handle NSCOUNT field at here
+ 243   3                              // ...
+ 244   3                      }
+ 245   2      
+ 246   2                      if (pDNSC_HD->ANCount > 0)
+ 247   2                      {
+ 248   3                              // Handle ARCOUNT field at here
+ 249   3                              // ...
+ 250   3                      }
+ 251   2              }
+ 252   1              
+ 253   1              return ip;
+ 254   1      } /* End of dnsc_ParseResponsePacket() */
+ 255          
+ 256          /*
+ 257           * ----------------------------------------------------------------------------
+ 258           * Function Name: DNSC_SetServerIP
+ 259           * Purpose: 
+ 260           * Params:
+ 261           * Returns:
+ 262           * Note:
+ 263           * ----------------------------------------------------------------------------
+ 264           */
+ 265          void DNSC_SetServerIP(U32_T ip)
+ 266          {
+ 267   1              dnscInfo.ServerIP = ip; 
+ 268   1      } /* End of DNSC_SetServerIP() */
+ 269          
+ 270          /*
+ 271           * ----------------------------------------------------------------------------
+ 272           * Function Name: DNSC_Timer()
+ 273           * Purpose: 
+ 274           * Params:
+ 275           * Returns:
+ 276           * Note:
+ 277           * ----------------------------------------------------------------------------
+ 278           */
+ 279          void DNSC_Timer()
+ 280                  {
+ 281   1              static U32_T TimerStop = 0, TimerStart = 0, TimerElapse;
+ 282   1              U8_T i;
+ 283   1              
+ 284   1              TimerStop = SWTIMER_Tick();
+ 285   1      
+ 286   1              if (TimerStop >= TimerStart)
+ 287   1                      TimerElapse = TimerStop - TimerStart;
+ 288   1              else
+ 289   1                      TimerElapse = TimerStop + (0xFFFFFFFF - TimerStart);
+ 290   1                                                              
+ 291   1              if (TimerElapse > SWTIMER_COUNT_SECOND)
+ 292   1              {
+ 293   2                      TimerStart = TimerStop; 
+ 294   2                      
+ 295   2                      if (dnscInfo.WaitTimer) 
+ 296   2                              dnscInfo.WaitTimer --;
+ 297   2                              
+ 298   2                      for (i = 0; i< MAX_DNSC_RECORD_CNT; i ++)       //Add for recorder expire function.
+ 299   2                      {
+C51 COMPILER V9.05   DNSC                                                                  03/02/2012 02:01:40 PAGE 6   
+
+ 300   3                              if (dnscInfo.Table[i].TimerToLive)
+ 301   3                              {
+ 302   4                                      dnscInfo.Table[i].TimerToLive --;
+ 303   4                              }
+ 304   3                      }
+ 305   2              }
+ 306   1      }  /* End of DNSC_Timer() */
+ 307          
+ 308          /*
+ 309           * ----------------------------------------------------------------------------
+ 310           * Function Name: DNSC_STATE DNSC_Start()
+ 311           * Purpose: 
+ 312           * Params:
+ 313           * Returns:
+ 314           * Note:
+ 315           * ----------------------------------------------------------------------------
+ 316           */
+ 317          DNSC_STATE DNSC_Start(U8_T *pHostName)
+ 318          {
+ 319   1              U8_T Index, timeTemp, i;
+ 320   1      
+ 321   1              for (Index = 0 ; Index < MAX_DNSC_RECORD_CNT ; Index ++)//Set the host name to query
+ 322   1              {
+ 323   2                      if (dnscInfo.Table[Index].Result == DNSC_QUERY_FREE)
+ 324   2                              break;
+ 325   2              }
+ 326   1      
+ 327   1              if (Index != MAX_DNSC_RECORD_CNT)
+ 328   1              {
+ 329   2                      strcpy(dnscInfo.Table[Index].HostName, pHostName);
+ 330   2                      dnscInfo.Table[Index].Result = DNSC_QUERY_WAIT;
+ 331   2                      return DNSC_QUERY_WAIT;
+ 332   2              }
+ 333   1      
+ 334   1              timeTemp = 0xff;        //Add for recorder expire function.
+ 335   1              i = 0;
+ 336   1              for (Index = 0; Index < MAX_DNSC_RECORD_CNT; Index ++)
+ 337   1              {
+ 338   2                      if ((dnscInfo.Table[Index].TimerToLive < timeTemp) && (dnscInfo.Table[Index].Result == DNSC_QUERY_OK))
+ 339   2                      {
+ 340   3                              timeTemp = dnscInfo.Table[Index].TimerToLive;
+ 341   3                              i = Index;
+ 342   3                      }
+ 343   2              }
+ 344   1              strcpy(dnscInfo.Table[i].HostName, pHostName);
+ 345   1              dnscInfo.Table[i].Result = DNSC_QUERY_WAIT;
+ 346   1      
+ 347   1              return DNSC_QUERY_WAIT;
+ 348   1      }  /* End of DNSC_QueryStart() */
+ 349          
+ 350          /*
+ 351           * ----------------------------------------------------------------------------
+ 352           * Function Name: DNSC_STATE DNSC_Query()
+ 353           * Purpose: 
+ 354           * Params:
+ 355           * Returns:
+ 356           * Note:
+ 357           * ----------------------------------------------------------------------------
+ 358           */
+ 359          DNSC_STATE DNSC_Query(U8_T *pHostName, U32_T *pHostIP)
+ 360          {
+ 361   1              U8_T Index;
+C51 COMPILER V9.05   DNSC                                                                  03/02/2012 02:01:40 PAGE 7   
+
+ 362   1      
+ 363   1              for (Index = 0 ; Index < MAX_DNSC_RECORD_CNT ; Index ++)//Find host IP in record table.
+ 364   1              {
+ 365   2                      if ((!strcmp(pHostName, dnscInfo.Table[Index].HostName)) && (dnscInfo.Table[Index].Result == DNSC_QUERY_
+             -OK))
+ 366   2                              break;
+ 367   2              }
+ 368   1              
+ 369   1              if (Index != MAX_DNSC_RECORD_CNT)
+ 370   1              {
+ 371   2                      *pHostIP = dnscInfo.Table[Index].HostIP;
+ 372   2                      return DNSC_QUERY_OK;
+ 373   2              }
+ 374   1      
+ 375   1              for (Index = 0 ; Index < MAX_DNSC_RECORD_CNT ; Index ++)//Check this host IP query.
+ 376   1              {
+ 377   2                      if ((!strcmp(pHostName, dnscInfo.Table[Index].HostName)) && (dnscInfo.Table[Index].Result == DNSC_QUERY_
+             -WAIT))
+ 378   2                              break;
+ 379   2              }
+ 380   1              
+ 381   1              if (Index != MAX_DNSC_RECORD_CNT)
+ 382   1              {
+ 383   2                      return DNSC_QUERY_WAIT;
+ 384   2              }       
+ 385   1              
+ 386   1              return DNSC_QUERY_FREE;
+ 387   1      } /* End of DNSC_Query() */
+ 388          
+ 389          /*
+ 390           * ----------------------------------------------------------------------------
+ 391           * Function Name: void DNSC_Task()
+ 392           * Purpose: 
+ 393           * Params:
+ 394           * Returns:
+ 395           * Note:
+ 396           * ----------------------------------------------------------------------------
+ 397           */
+ 398          void DNSC_Task()
+ 399          {
+ 400   1              static U8_T Index;
+ 401   1      
+ 402   1              DNSC_Timer();
+ 403   1      
+ 404   1              if ((dnscInfo.WaitTimer != 0) && ((dnscInfo.TaskState != DNSC_TASK_WAIT_RESPONSE) || (dnscInfo.TaskState 
+             -!= DNSC_TASK_CLOSE)))//Check excution condition
+ 405   1                      return;
+ 406   1              
+ 407   1              switch (dnscInfo.TaskState)
+ 408   1              {
+ 409   2              case DNSC_TASK_IDLE://Function start or initial.
+ 410   2                      dnscInfo.TaskState = DNSC_TASK_START;
+ 411   2                      break;
+ 412   2                      
+ 413   2              case DNSC_TASK_START://Find the query request
+ 414   2                      for (Index = 0 ; Index < MAX_DNSC_RECORD_CNT ; Index ++)
+ 415   2                      {
+ 416   3                              if (dnscInfo.Table[Index].Result == DNSC_QUERY_WAIT)
+ 417   3                                      break;
+ 418   3                      }
+ 419   2                      if (Index != MAX_DNSC_RECORD_CNT)
+ 420   2                      {
+C51 COMPILER V9.05   DNSC                                                                  03/02/2012 02:01:40 PAGE 8   
+
+ 421   3                              dnscInfo.RetryCnt = MAX_DNSC_RETRY_CNT;
+ 422   3                              dnscInfo.TaskState = DNSC_TASK_QUERY;
+ 423   3                      }
+ 424   2                      break;
+ 425   2                      
+ 426   2              case DNSC_TASK_QUERY://Start query
+ 427   2                      if ((dnscInfo.UdpSocket = TCPIP_UdpNew(dnscInfo.InterAppID, 0, dnscInfo.ServerIP, 0, DNS_SERVER_PORT)) =
+             -= TCPIP_NO_NEW_CONN)
+ 428   2                      {
+ 429   3                              dnscInfo.Table[Index].Result = DNSC_QUERY_FREE;
+ 430   3                              dnscInfo.TaskState = DNSC_TASK_START;
+ 431   3                      }
+ 432   2              else
+ 433   2              {
+ 434   3                              if (dnsc_Send(dnscInfo.UdpSocket, dnscInfo.Table[Index].HostName, dnscInfo.ServerIP))
+ 435   3                              {
+ 436   4                                      dnscInfo.TaskState = DNSC_TASK_CLOSE;           
+ 437   4                                      TCPIP_UdpClose(dnscInfo.UdpSocket);
+ 438   4                              }
+ 439   3                              else
+ 440   3                              {       
+ 441   4                                      dnscInfo.WaitTimer = MAX_DNSC_TIMER_OUT;//Set time out (unit = sec)
+ 442   4                                      dnscInfo.TaskState = DNSC_TASK_WAIT_RESPONSE;
+ 443   4                              }
+ 444   3              }
+ 445   2                      break;
+ 446   2                      
+ 447   2              case DNSC_TASK_WAIT_RESPONSE://Wait response or timeout
+ 448   2                      if (dnscInfo.WaitTimer == 0)
+ 449   2                      {
+ 450   3      #if (DNSC_DEBUG)
+ 451   3                              printd("DNSC: Query Host Name %s IP timeout!\n\r", dnscInfo.Table[Index].HostName);
+ 452   3      #endif                  
+ 453   3                              dnscInfo.TaskState = DNSC_TASK_CLOSE;
+ 454   3                              TCPIP_UdpClose(dnscInfo.UdpSocket);
+ 455   3                      }       
+ 456   2                      break;
+ 457   2                      
+ 458   2              case DNSC_TASK_RESPONSE://Receive response packet OK
+ 459   2                      if (dnscInfo.QueryIP == 0)
+ 460   2                              dnscInfo.TaskState = DNSC_TASK_CLOSE;                           
+ 461   2                      else
+ 462   2                      {
+ 463   3                              dnscInfo.Table[Index].HostIP = dnscInfo.QueryIP;                        
+ 464   3                              dnscInfo.Table[Index].Result = DNSC_QUERY_OK;                   
+ 465   3                              dnscInfo.Table[Index].TimerToLive = MAX_DNSC_RECORD_EXPIRE_TIME;        //Add for recorder expire function.
+ 466   3                              dnscInfo.TaskState = DNSC_TASK_START;
+ 467   3                      }
+ 468   2                      break;
+ 469   2                              
+ 470   2              case DNSC_TASK_CLOSE://Retry again
+ 471   2                      if (dnscInfo.RetryCnt == 0)
+ 472   2                      {
+ 473   3                              dnscInfo.Table[Index].Result = DNSC_QUERY_FREE;
+ 474   3                              dnscInfo.TaskState = DNSC_TASK_START;                                   
+ 475   3                      }
+ 476   2                      else
+ 477   2                      {
+ 478   3                              dnscInfo.RetryCnt --;           
+ 479   3                              dnscInfo.TaskState = DNSC_TASK_QUERY;
+ 480   3                      }
+ 481   2                      dnscInfo.WaitTimer = 0;
+C51 COMPILER V9.05   DNSC                                                                  03/02/2012 02:01:40 PAGE 9   
+
+ 482   2                      break;
+ 483   2                      
+ 484   2              default:
+ 485   2                      dnscInfo.WaitTimer = 0; 
+ 486   2                      dnscInfo.TaskState = DNSC_TASK_IDLE;
+ 487   2                      break;  
+ 488   2              };
+ 489   1      } /* End of DNSC_Task() */
+ 490          
+ 491          #endif /* INCLUDE_DNS_CLIENT */
+ 492          
+ 493          /* End of dnsc.c */
+ 494          
+ 495          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   3187    ----
+   CONSTANT SIZE    =     84    ----
+   XDATA SIZE       =    237     585
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

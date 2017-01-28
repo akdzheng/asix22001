@@ -1,0 +1,841 @@
+C51 COMPILER V9.05   GUDPDAT                                                               03/25/2012 20:16:55 PAGE 1   
+
+
+C51 COMPILER V9.05, COMPILATION OF MODULE GUDPDAT
+OBJECT MODULE PLACED IN .\gudpdat.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE ..\src\mgs2wifi\gudpdat.c LARGE OMF2 ROM(D16M) BROWSE INTVECTOR(0X8020) INC
+                    -DIR(..\src\main;..\src\mcpu;..\src\mswdma;..\src\uart0;..\src\mmstimer;..\src\mwif;..\src\madapter;..\src\mtcpip;..\src\
+                    -mping;..\src\mpppoe;..\src\si2c;..\src\mdnsc;..\src\mconsole;..\src\mtelnet;..\src\meeprom;..\src\mmac;..\src\mdhcpc;..\
+                    -src\mhttp;..\src\mgs2wifi;..\src\mhsuart;..\src\msmtpc;..\src\web_page;..\src\mdhcps;..\src\mdebug;..\src\counter) DEFIN
+                    -E(RuntimeCodeAt32KH) VARBANKING DEBUG PRINT(.\gudpdat.lst) OBJECT(.\gudpdat.obj)
+
+line level    source
+
+   1          /*
+   2           ******************************************************************************
+   3           *     Copyright (c) 2011       ASIX Electronic Corporation      All rights reserved.
+   4           *
+   5           *     This is unpublished proprietary source code of ASIX Electronic Corporation
+   6           *
+   7           *     The copyright notice above does not evidence any actual or intended
+   8           *     publication of such source code.
+   9           ******************************************************************************
+  10           */
+  11           /*============================================================================
+  12           * Module Name: gudpdat.c
+  13           * Purpose:
+  14           * Author:
+  15           * Date:
+  16           * Notes:
+  17           * $Log: gudpdat.c,v $
+  18           *
+  19           *=============================================================================
+  20           */
+  21          
+  22          /* INCLUDE FILE DECLARATIONS */
+  23          #include "adapter.h"
+  24          #include "gs2w.h"
+  25          #include "gconfig.h"
+  26          #include "gudpdat.h"
+  27          #include "tcpip.h"
+  28          #include "mstimer.h"
+  29          #include "stoe.h"
+  30          #include "uart0.h"
+  31          #include "hsuart.h"
+  32          #include "hsuart2.h"
+  33          #include "printd.h"
+  34          #include <string.h>
+  35          
+  36          /* NAMING CONSTANT DECLARATIONS */
+  37          #define GUDPDAT_MAX_DATA_LEN                1472 // maximun UDP payload length
+  38          #define GUDPDAT_MAX_CONNS                               1 // maximun UDP connections, current version only supports 
+  39                                                    // one connection
+  40          #define GUDPDAT_NO_NEW_CONN                             0xFF
+  41          
+  42          #define GUDPDAT_STATE_FREE                              0
+  43          #define GUDPDAT_STATE_CONNECTING        1
+  44          #define GUDPDAT_STATE_WAIT                              2
+  45          #define GUDPDAT_STATE_CONNECTED                 3
+  46          
+  47          #define GUDPDAT_CLOSE_INDICATOR         0x30
+  48          #define GUDPDAT_CONNECT_INDICATOR       0x31
+  49          #define GUDPDAT_DATA_INDICATOR                  0x32
+  50          #define GUDPDAT_FLOW_CONTROL_INDICATOR  0x33
+  51          #define GUDPDAT_MAIN_CONNECT_TIME       (3 * 60 * (1000/SWTIMER_INTERVAL))   /* 3 minutes */
+C51 COMPILER V9.05   GUDPDAT                                                               03/25/2012 20:16:55 PAGE 2   
+
+  52          
+  53          /* MACRO DECLARATIONS */
+  54          
+  55          /* GLOBAL VARIABLES DECLARATIONS */
+  56          
+  57          /* LOCAL VARIABLES DECLARATIONS */
+  58          static GUDPDAT_CONN gudpdat_Conns[GUDPDAT_MAX_CONNS];
+  59          static U8_T gudpdat_InterAppId;
+  60          //static U16_T gudpdat_Port;
+  61          static U16_T gudpdat_EthernetTxTimer;
+  62          static U8_T gudpdat_UdpClient;
+  63          static U8_T gudpdat_UdpAutoConnect;
+  64          static U32_T elapse, time;
+  65          static U8_T txBuf[6];
+  66          
+  67          /* LOCAL SUBPROGRAM DECLARATIONS */
+  68          #if GS2W_ENABLE_FLOW_CONTROL                    
+              static void gudpdat_HandleFlowControlPacket(U8_T XDATA *pData, U16_T length, U8_T id);
+              static void gudpdat_SetFlowControl(U8_T fCtrl);
+              #endif
+  72          static void gudpdat_GetDataFromUr(U8_T id);
+  73          static void gudpdat_SendData(U8_T id);
+  74          static void gudpdat_MaintainConnection(U8_T id);
+  75          static U8_T gudpdat_CheckAllConnStatusIdle(void);
+  76          
+  77          /*
+  78           * ----------------------------------------------------------------------------
+  79           * Function Name: GUDPDAT_Task
+  80           * Purpose: 
+  81           * Params:
+  82           * Returns:
+  83           * Note:
+  84           * ----------------------------------------------------------------------------
+  85           */
+  86          void GUDPDAT_Task(void) 
+  87          {
+  88   1              U8_T i;
+  89   1          U32_T dip;
+  90   1          U16_T dport;
+  91   1      
+  92   1          for (i = 0; i < GUDPDAT_MAX_CONNS; i++)
+  93   1          {
+  94   2              switch(gudpdat_Conns[i].State)
+  95   2              {
+  96   3                  case GUDPDAT_STATE_FREE:
+  97   3                      if (gudpdat_UdpClient == TRUE)
+  98   3                      {
+  99   4                          dip = GCONFIG_GetClientDestIP();
+ 100   4                                  dport = GCONFIG_GetClientDestPort(); 
+ 101   4              
+ 102   4                          /* get destination ip */
+ 103   4                          if (dip == 0)
+ 104   4                              break;
+ 105   4              
+ 106   4                                  printd("Make a UDP connection with host ip:%bu %bu %bu %bu port:%u\n\r",
+ 107   4                                         (U8_T) ((dip >> 24) & 0x000000FF), (U8_T) ((dip >> 16) & 0x000000FF), 
+ 108   4                                                 (U8_T) ((dip >> 8) & 0x000000FF), (U8_T) (dip & 0x000000FF), (U16_T) dport);
+ 109   4                      
+ 110   4                                          gudpdat_Conns[i].State = GUDPDAT_STATE_CONNECTING;
+ 111   4                          gudpdat_Conns[i].Timer = SWTIMER_Tick();
+ 112   4                          gudpdat_Conns[i].Ip = dip;
+ 113   4                          gudpdat_Conns[i].Port = dport;
+C51 COMPILER V9.05   GUDPDAT                                                               03/25/2012 20:16:55 PAGE 3   
+
+ 114   4                                          gudpdat_Conns[i].UdpSocket = TCPIP_UdpNew(gudpdat_InterAppId,
+ 115   4                                                                    i,        
+ 116   4                                                                                    dip,
+ 117   4                                                                                                                            GTCPDAT_GetRandomPortNum(),
+ 118   4                                                                                                                            dport);
+ 119   4                          /* Send ARP request to build IP/MAC entry in ARP table */
+ 120   4                          if ((STOE_GetIPAddr() & STOE_GetSubnetMask()) != (dip & STOE_GetSubnetMask()))
+ 121   4                              dip = STOE_GetGateway();
+ 122   4      
+ 123   4                          ETH_SendArpRequest(dip);
+ 124   4                          ETH_SendArpRequest(dip);
+ 125   4                                          GS2W_SetTaskState(GS2W_STATE_UDP_DATA_PROCESS);
+ 126   4                      }
+ 127   3                      else  if (gudpdat_UdpAutoConnect == TRUE)
+ 128   3                      {
+ 129   4                          dip = GCONFIG_GetUdpAutoConnectClientIp();
+ 130   4                                  dport = GCONFIG_GetUdpAutoConnectClientPort(); 
+ 131   4              
+ 132   4                          /* get destination ip */
+ 133   4                          if (dip == 0)
+ 134   4                              break;
+ 135   4              
+ 136   4                                  gudpdat_UdpAutoConnect = FALSE;
+ 137   4                                          gudpdat_Conns[i].State = GUDPDAT_STATE_WAIT;
+ 138   4                          gudpdat_Conns[i].Timer = SWTIMER_Tick();
+ 139   4                          gudpdat_Conns[i].Ip = dip;
+ 140   4                          gudpdat_Conns[i].Port = dport;
+ 141   4                                          gudpdat_Conns[i].UdpSocket = TCPIP_UdpNew(gudpdat_InterAppId,
+ 142   4                                                                    i,        
+ 143   4                                                                                    dip,
+ 144   4                                                                                                                            GTCPDAT_GetRandomPortNum(),
+ 145   4                                                                                                                            dport);
+ 146   4                          /* Send ARP request to build IP/MAC entry in ARP table */
+ 147   4                          if ((STOE_GetIPAddr() & STOE_GetSubnetMask()) != (dip & STOE_GetSubnetMask()))
+ 148   4                              dip = STOE_GetGateway();
+ 149   4      
+ 150   4                          ETH_SendArpRequest(dip);
+ 151   4                          ETH_SendArpRequest(dip);
+ 152   4                                          GS2W_SetTaskState(GS2W_STATE_UDP_DATA_PROCESS);
+ 153   4                      }
+ 154   3                      break;
+ 155   3                  case GUDPDAT_STATE_CONNECTING:
+ 156   3                      if (gudpdat_UdpClient == TRUE)
+ 157   3                      {
+ 158   4      #if GS2W_ENABLE_FLOW_CONTROL
+                                 dip = gudpdat_Conns[i].Ip;
+                                 if ((STOE_GetIPAddr() & STOE_GetSubnetMask()) != (dip & STOE_GetSubnetMask()))
+                                      dip = STOE_GetGateway();
+              
+                                 if (uip_findarptable((U16_T *)&dip) == 0xFF)
+                                 {
+                                      ETH_SendArpRequest(dip);
+                                      break;
+                                 }
+               
+                                  /* Send connected message */
+                                  txBuf[0] = GUDPDAT_CONNECT_INDICATOR;
+                                  txBuf[1] = 0;
+                                  txBuf[2] = 0;
+                                  TCPIP_UdpSend(gudpdat_Conns[i].UdpSocket, 0, 0, txBuf, 3);
+              #else
+ 175   4                          gudpdat_Conns[i].State = GUDPDAT_STATE_CONNECTED;
+C51 COMPILER V9.05   GUDPDAT                                                               03/25/2012 20:16:55 PAGE 4   
+
+ 176   4      #endif
+ 177   4                      }
+ 178   3                      break;
+ 179   3      
+ 180   3                  case GUDPDAT_STATE_CONNECTED:
+ 181   3                              {
+ 182   4      #if GS2W_ENABLE_FLOW_CONTROL
+                                              U8_T  modemStatus, modemCtrl;
+                                      
+                                  /* Flow control header: type    length   payload */
+                                  /*                      ------  -------  ------- */
+                                  /*                      1 byte  2 bytes   any    */
+                                  /* length = length of payload                    */
+                                              modemStatus = HSUR2_GetModemStatus(TRUE);
+                                  modemCtrl = (HSUR2_GetModemControl() & 0x3);
+                                              if (gudpdat_Conns[i].FlowControlModemStatus != modemStatus || 
+                                      modemCtrl != gudpdat_Conns[i].FlowControlModemCtrl)                     
+                                              {
+                                                      gudpdat_Conns[i].FlowControlModemStatus = modemStatus;
+                                      gudpdat_Conns[i].FlowControlModemCtrl = modemCtrl;
+                                                      txBuf[0] = GUDPDAT_FLOW_CONTROL_INDICATOR;
+                                      txBuf[1] = 0;
+                                      txBuf[2] = 3;
+                                                      txBuf[3] = MODEM_STATUS_CHANGE;
+                                                      txBuf[4] = modemStatus;
+                                                      txBuf[5] = modemCtrl;
+                                                      TCPIP_UdpSend(gudpdat_Conns[i].UdpSocket, 0, 0, txBuf, 6);
+                                              }
+              
+                                              if (gudpdat_Conns[i].TxDatLen == 0)
+                                              {
+                                                      gudpdat_Conns[i].TxBuf[gudpdat_Conns[i].TxDatLen++] = GUDPDAT_DATA_INDICATOR; // UDP data pack
+             -et indicator
+                                      gudpdat_Conns[i].TxDatLen += 2;
+                                              }
+              
+                                              if (gudpdat_Conns[i].FlowControlXonRx == TRUE)
+                                              {
+              #endif
+ 214   4                                              gudpdat_GetDataFromUr(i);
+ 215   4                              gudpdat_SendData(i);
+ 216   4      #if GS2W_ENABLE_FLOW_CONTROL                    
+                                              }
+              #endif
+ 219   4                          /* Maintain the connection: send ARP request each GUDPDAT_MAIN_CONNECT_TIME */
+ 220   4                          gudpdat_MaintainConnection(i);
+ 221   4                      }
+ 222   3                      break;
+ 223   3      
+ 224   3                  default:
+ 225   3                      break;
+ 226   3              }
+ 227   2          }
+ 228   1      } /* End of GUDPDAT_Task() */
+ 229          
+ 230          /*
+ 231           * ----------------------------------------------------------------------------
+ 232           * static void gudpdat_GetDataFromUr(U8_T id)
+ 233           * Purpose: Initialization
+ 234           * Params:
+ 235           * Returns:
+ 236           * Note:
+C51 COMPILER V9.05   GUDPDAT                                                               03/25/2012 20:16:55 PAGE 5   
+
+ 237           * ----------------------------------------------------------------------------
+ 238           */
+ 239          static void gudpdat_GetDataFromUr(U8_T id)
+ 240          {
+ 241   1          U8_T *pUpBuf;
+ 242   1          U16_T availCount;
+ 243   1          GUDPDAT_CONN *pConn= &gudpdat_Conns[id];
+ 244   1      
+ 245   1          availCount = HSUR2_GetRxDmaAvailCount();
+ 246   1          if (availCount == 0 || pConn->TxDatLen >= GUDPDAT_TX_BUF_SIZE)
+ 247   1              return;
+ 248   1      
+ 249   1          pUpBuf = &pConn->TxBuf[pConn->TxDatLen];
+ 250   1      
+ 251   1          if ((availCount+pConn->TxDatLen) >= GUDPDAT_MAX_DATA_LEN)
+ 252   1              availCount = GUDPDAT_MAX_DATA_LEN - pConn->TxDatLen;
+ 253   1      
+ 254   1          HSUR2_CopyUartToApp(pUpBuf, availCount);
+ 255   1          pConn->TxDatLen += availCount;
+ 256   1          pConn->UrRxBytes += availCount;
+ 257   1      
+ 258   1      } /* End of gudpdat_GetDataFromUr(U8_T id) */
+ 259          
+ 260          /*
+ 261           * ----------------------------------------------------------------------------
+ 262           * Function Name: gudpdat_MaintainConnection()
+ 263           * Purpose: 
+ 264           * Params:
+ 265           * Returns:
+ 266           * Note:
+ 267           * ----------------------------------------------------------------------------
+ 268           */
+ 269          static void gudpdat_MaintainConnection(U8_T id)
+ 270          {
+ 271   1          time = SWTIMER_Tick();
+ 272   1      
+ 273   1          if (time >= gudpdat_Conns[id].Timer)
+ 274   1              elapse = time - gudpdat_Conns[id].Timer;
+ 275   1          else
+ 276   1              elapse = (0xFFFFFFFF - gudpdat_Conns[id].Timer) + time;
+ 277   1      
+ 278   1          if (elapse >= GUDPDAT_MAIN_CONNECT_TIME)
+ 279   1          {
+ 280   2              if ((STOE_GetIPAddr() & STOE_GetSubnetMask()) != (gudpdat_Conns[id].Ip & STOE_GetSubnetMask()))
+ 281   2                  ETH_SendArpRequest(STOE_GetGateway());
+ 282   2              else
+ 283   2                  ETH_SendArpRequest(gudpdat_Conns[id].Ip);
+ 284   2              gudpdat_Conns[id].Timer = time;
+ 285   2          }
+ 286   1      } /* End of gudpdat_MaintainConnection() */
+ 287          
+ 288          /*
+ 289           * ----------------------------------------------------------------------------
+ 290           * Function Name: gudpdat_SendData()
+ 291           * Purpose: 
+ 292           * Params:
+ 293           * Returns:
+ 294           * Note:
+ 295           * ----------------------------------------------------------------------------
+ 296           */
+ 297          static void gudpdat_SendData(U8_T id)
+ 298          {
+C51 COMPILER V9.05   GUDPDAT                                                               03/25/2012 20:16:55 PAGE 6   
+
+ 299   1          GUDPDAT_CONN *pConn= &gudpdat_Conns[id];
+ 300   1      
+ 301   1          if (pConn->TxDatLen >= GUDPDAT_MAX_DATA_LEN)
+ 302   1              {
+ 303   2      #if GS2W_ENABLE_FLOW_CONTROL
+                      /* Fill in the length of payload */
+                      pConn->TxBuf[1] = (U8_T)((GUDPDAT_MAX_DATA_LEN-3) >> 8);
+                      pConn->TxBuf[2] = (U8_T)((GUDPDAT_MAX_DATA_LEN-3) & 0x00FF);
+              #endif
+ 308   2              TCPIP_UdpSend(pConn->UdpSocket, 0, 0, pConn->TxBuf, GUDPDAT_MAX_DATA_LEN);
+ 309   2                                              
+ 310   2              pConn->TxDatLen = 0;                            
+ 311   2                      pConn->TxWaitTime = 0;
+ 312   2          }
+ 313   1      #if GS2W_ENABLE_FLOW_CONTROL
+                  else if (pConn->TxDatLen > 3) // both client and server have an indicator
+              #else
+ 316   1          else if (pConn->TxDatLen > 0)
+ 317   1      #endif
+ 318   1          {
+ 319   2              time = SWTIMER_Tick();
+ 320   2      
+ 321   2              if (pConn->TxWaitTime == 0)
+ 322   2              {
+ 323   3                      pConn->TxWaitTime = time;
+ 324   3              }
+ 325   2              else
+ 326   2              {
+ 327   3                      if (time >= pConn->TxWaitTime)
+ 328   3                              elapse = time - pConn->TxWaitTime;
+ 329   3                      else
+ 330   3                              elapse = (0xFFFFFFFF - pConn->TxWaitTime) + time;
+ 331   3              
+ 332   3                      if ((elapse * SWTIMER_INTERVAL) >= gudpdat_EthernetTxTimer)
+ 333   3                      {
+ 334   4      #if GS2W_ENABLE_FLOW_CONTROL
+                              /* Fill in the length of payload */
+                              pConn->TxBuf[1] = (U8_T)((pConn->TxDatLen-3) >> 8);
+                              pConn->TxBuf[2] = (U8_T)((pConn->TxDatLen-3) & 0x00FF);
+              #endif
+ 339   4                              TCPIP_UdpSend(pConn->UdpSocket, 0, 0, pConn->TxBuf, pConn->TxDatLen);
+ 340   4                      pConn->TxDatLen = 0;
+ 341   4                      pConn->TxWaitTime = 0;  
+ 342   4                  }
+ 343   3              }
+ 344   2          }
+ 345   1      } /* End of gudpdat_SendData() */
+ 346          
+ 347          /*
+ 348           * ----------------------------------------------------------------------------
+ 349           * Function Name: GUDPDAT_Init()
+ 350           * Purpose: Initialization
+ 351           * Params:
+ 352           * Returns:
+ 353           * Note:
+ 354           * ----------------------------------------------------------------------------
+ 355           */
+ 356          void GUDPDAT_Init(U16_T localPort)
+ 357          {
+ 358   1              U8_T    i;
+ 359   1      
+ 360   1              gudpdat_UdpClient = FALSE;
+C51 COMPILER V9.05   GUDPDAT                                                               03/25/2012 20:16:55 PAGE 7   
+
+ 361   1              gudpdat_UdpAutoConnect = FALSE;
+ 362   1      
+ 363   1              for (i = 0; i < GUDPDAT_MAX_CONNS; i++)
+ 364   1          {
+ 365   2                      gudpdat_Conns[i].State = GUDPDAT_STATE_FREE;
+ 366   2              gudpdat_Conns[i].UrRxBytes = 0;
+ 367   2              gudpdat_Conns[i].UrTxBytes = 0;
+ 368   2              gudpdat_Conns[i].TxDatLen = 0;
+ 369   2              gudpdat_Conns[i].TxWaitTime = 0;
+ 370   2      #if GS2W_ENABLE_FLOW_CONTROL
+                          gudpdat_Conns[i].FlowControlModemStatus = HSUR2_GetModemStatus(TRUE);
+                      gudpdat_Conns[i].FlowControlModemCtrl = (HSUR2_GetModemControl() & 0x3);
+                      gudpdat_Conns[i].FlowControlXonRx = TRUE;
+              #endif
+ 375   2          }
+ 376   1      
+ 377   1              gudpdat_InterAppId = TCPIP_Bind(GUDPDAT_NewConn, GUDPDAT_Event, GUDPDAT_Receive);
+ 378   1      
+ 379   1              if ((GCONFIG_GetNetwork() & GCONFIG_NETWORK_CLIENT) != GCONFIG_NETWORK_CLIENT)
+ 380   1              {
+ 381   2                      TCPIP_UdpListen(localPort, gudpdat_InterAppId);                 
+ 382   2                      printd("UDP data server init ok.\n\r");         
+ 383   2                      gudpdat_UdpAutoConnect = GCONFIG_EnableUdpAutoConnectAfterReboot();
+ 384   2              }
+ 385   1              else
+ 386   1              {
+ 387   2                      gudpdat_UdpClient = TRUE;       
+ 388   2                      printd("UDP data client init ok.\n\r");                 
+ 389   2              }
+ 390   1      
+ 391   1              gudpdat_EthernetTxTimer = GCONFIG_GetEthernetTxTimer();
+ 392   1      
+ 393   1      } /* End of GUDPDAT_Init() */
+ 394          
+ 395          /*
+ 396           * ----------------------------------------------------------------------------
+ 397           * Function Name: GUDPDAT_NewConn
+ 398           * Purpose: 
+ 399           * Params:
+ 400           * Returns:
+ 401           * Note:
+ 402           * ----------------------------------------------------------------------------
+ 403           */
+ 404          U8_T GUDPDAT_NewConn(U32_T XDATA* pip, U16_T remotePort, U8_T socket)
+ 405          {
+ 406   1              U8_T    i;
+ 407   1      
+ 408   1              if (GCONFIG_EnableUdpAutoConnectAfterReboot() == TRUE)
+ 409   1              {
+ 410   2                      GCONFIG_SetUdpAutoConnectClientIp(*pip);
+ 411   2                      GCONFIG_SetUdpAutoConnectClientPort(remotePort);
+ 412   2                      GCONFIG_WriteConfigData();
+ 413   2              }
+ 414   1      
+ 415   1      #if (GUDPDAT_MAX_CONNS == 1)
+ 416   1              if (gudpdat_Conns[0].State == GUDPDAT_STATE_CONNECTED)
+ 417   1              {
+ 418   2                      gudpdat_Conns[0].State = GUDPDAT_STATE_FREE;
+ 419   2                      TCPIP_UdpClose(gudpdat_Conns[0].UdpSocket);
+ 420   2              }
+ 421   1      #endif
+ 422   1      
+C51 COMPILER V9.05   GUDPDAT                                                               03/25/2012 20:16:55 PAGE 8   
+
+ 423   1              for (i = 0; i < GUDPDAT_MAX_CONNS; i++)
+ 424   1              {
+ 425   2                      if (gudpdat_Conns[i].State == GUDPDAT_STATE_FREE)
+ 426   2                      {
+ 427   3      #if GS2W_ENABLE_FLOW_CONTROL
+                                      if (gudpdat_UdpAutoConnect == TRUE)
+                                      {
+                                              gudpdat_UdpAutoConnect = FALSE;
+                                              GS2W_SetTaskState(GS2W_STATE_UDP_DATA_PROCESS);                 
+                                              gudpdat_Conns[i].State = GUDPDAT_STATE_CONNECTED;
+                                      }
+                                      else
+                                      {
+                                              gudpdat_Conns[i].State = GUDPDAT_STATE_WAIT;
+                                      }
+              #else
+ 439   3                              GS2W_SetTaskState(GS2W_STATE_UDP_DATA_PROCESS);                 
+ 440   3                              gudpdat_Conns[i].State = GUDPDAT_STATE_CONNECTED;
+ 441   3      
+ 442   3                              if (gudpdat_UdpAutoConnect == TRUE)
+ 443   3                                      gudpdat_UdpAutoConnect = FALSE;
+ 444   3      #endif
+ 445   3                              gudpdat_Conns[i].UdpSocket = socket;
+ 446   3                  gudpdat_Conns[i].Timer = SWTIMER_Tick();
+ 447   3                  gudpdat_Conns[i].Ip = *pip;
+ 448   3                  gudpdat_Conns[i].Port = remotePort;
+ 449   3                              printd("New UDP connection: id=%bu, remotePort=%u, socket=%bu\n\r", i, remotePort, socket);
+ 450   3      
+ 451   3                              return i;
+ 452   3                      }
+ 453   2              }
+ 454   1              
+ 455   1              return GUDPDAT_NO_NEW_CONN;
+ 456   1      
+ 457   1      } /* End of GUDPDAT_NewConn() */
+ 458          
+ 459          /*
+ 460           * ----------------------------------------------------------------------------
+ 461           * Function Name: GUDPDAT_Event
+ 462           * Purpose: 
+ 463           * Params:
+ 464           * Returns:
+ 465           * Note:
+ 466           * ----------------------------------------------------------------------------
+ 467           */
+ 468          void GUDPDAT_Event(U8_T id, U8_T event)
+ 469          {
+ 470   1          GUDPDAT_CONN *pConn= &gudpdat_Conns[id];
+ 471   1      
+ 472   1              if (event == TCPIP_CONNECT_ACTIVE)
+ 473   1              {
+ 474   2      #if GS2W_ENABLE_FLOW_CONTROL
+                              if (pConn->State == GUDPDAT_STATE_WAIT)
+                              {
+                                      pConn->State = GUDPDAT_STATE_CONNECTED;
+                                      GS2W_SetTaskState(GS2W_STATE_UDP_DATA_PROCESS);
+                              }
+              #endif
+ 481   2              }
+ 482   1              else if (event == TCPIP_CONNECT_CANCEL)
+ 483   1              {
+ 484   2      #if GS2W_ENABLE_FLOW_CONTROL
+C51 COMPILER V9.05   GUDPDAT                                                               03/25/2012 20:16:55 PAGE 9   
+
+                              if ((GCONFIG_GetNetwork() & GCONFIG_NETWORK_CLIENT) == GCONFIG_NETWORK_CLIENT)
+                              {
+                                      txBuf[0] = GUDPDAT_CLOSE_INDICATOR; // close indication
+                          txBuf[1] = 0;
+                          txBuf[2] = 0;
+                                      TCPIP_UdpSend(pConn->UdpSocket, 0, 0, txBuf, 3);
+                              }
+              #endif
+ 493   2                      pConn->State = GUDPDAT_STATE_FREE;
+ 494   2                      GS2W_SetTaskState(GS2W_STATE_IDLE);
+ 495   2                      TCPIP_UdpClose(pConn->UdpSocket);
+ 496   2              }
+ 497   1      
+ 498   1      } /* End of GUDPDAT_Event() */
+ 499          
+ 500          /*
+ 501           * ----------------------------------------------------------------------------
+ 502           * Function Name: GUDPDAT_Receive
+ 503           * Purpose: 
+ 504           * Params:
+ 505           * Returns:
+ 506           * Note:
+ 507           * ----------------------------------------------------------------------------
+ 508           */
+ 509          void GUDPDAT_Receive(U8_T XDATA* pData, U16_T length, U8_T id)
+ 510          {
+ 511   1          GUDPDAT_CONN *pConn= &gudpdat_Conns[id];
+ 512   1              printd("recv data:: id = %bu, length=%u\r\n", id, length);
+ 513   1      #if GS2W_ENABLE_FLOW_CONTROL
+              MoreUdpData:
+                      if (length > 3 && *pData == GUDPDAT_DATA_INDICATOR)
+                      {
+                      U16_T dataLen = (*(pData+1) << 8) + *(pData+2) + 3;
+              
+                              if (pConn->State != GUDPDAT_STATE_CONNECTED)
+                              {
+                                      pConn->State = GUDPDAT_STATE_CONNECTED;
+                                      GS2W_SetTaskState(GS2W_STATE_UDP_DATA_PROCESS);
+                                      pConn->TxDatLen = 0;
+                                      pConn->TxWaitTime = 0;                  
+                              }
+                      
+                      if (dataLen > length) 
+                          dataLen = length;
+              
+                          HSUR2_XmitOutEnq((pData + 3), (dataLen - 3));
+                                      pConn->UrTxBytes += (dataLen - 3);
+              
+                      length -= dataLen;
+                      if (length > 0)
+                      {
+                          /* point to the next packet header */
+                          pData += dataLen;
+                          goto MoreUdpData;
+                      }
+                      }
+                      else if (length <= 6 && *pData == GUDPDAT_FLOW_CONTROL_INDICATOR)
+                      {
+                              gudpdat_HandleFlowControlPacket(pData, length, id);
+                      }
+                      else if (length == 3)
+                  {
+C51 COMPILER V9.05   GUDPDAT                                                               03/25/2012 20:16:55 PAGE 10  
+
+                      if (*pData == GUDPDAT_CONNECT_INDICATOR)
+                      {
+                          pConn->State = GUDPDAT_STATE_CONNECTED;
+                          GS2W_SetTaskState(GS2W_STATE_UDP_DATA_PROCESS);
+                          pConn->TxDatLen = 0;
+                          pConn->TxWaitTime = 0;                      
+                      }
+                      else if (*pData == GUDPDAT_CLOSE_INDICATOR)
+                      {
+                          pConn->State = GUDPDAT_STATE_FREE;
+                          GS2W_SetTaskState(GS2W_STATE_IDLE); 
+                          printd("TCPIP_UdpClose(id=%bu, socket=%bu)\n\r", id, pConn->UdpSocket);
+                          TCPIP_UdpClose(pConn->UdpSocket);
+                      }
+                  }
+              #else
+ 563   1              HSUR2_XmitOutEnq(pData, length);
+ 564   1              pConn->UrTxBytes += length;
+ 565   1      #endif
+ 566   1      } /* End of GUDPDAT_Receive() */
+ 567          
+ 568          #if GS2W_ENABLE_FLOW_CONTROL                    
+              /*
+               * ----------------------------------------------------------------------------
+               * Function Name: gudpdat_HandleFlowControlPacket
+               * Purpose: 
+               * Params:
+               * Returns:
+               * Note:
+               * ----------------------------------------------------------------------------
+               */
+              void gudpdat_HandleFlowControlPacket(U8_T XDATA* pData, U16_T length, U8_T id)
+              {
+                      U8_T command = *(pData + 3);
+                      U8_T dat1;
+                      U8_T dat2;
+              
+                      if (length >= 5)
+                      {
+                              dat1 = *(pData + 4);
+              
+                              if (length == 6)
+                                      dat2 = *(pData + 5);
+                      }
+              
+                      switch (command)
+                      {
+                              case IOCTL_SERIAL_GET_DTRRTS: // 0x01
+                                      txBuf[0] = GUDPDAT_FLOW_CONTROL_INDICATOR;
+                          txBuf[1] = 0;
+                          txBuf[2] = 2;
+                                      txBuf[3] = IOCTL_SERIAL_GET_DTRRTS_REPLY; // 0xA1
+                                      txBuf[4] = HSUR2_GetModemControl();
+                                      TCPIP_UdpSend(gudpdat_Conns[id].UdpSocket, 0, 0, &txBuf, 5);
+                                      break;
+                              case IOCTL_SERIAL_GET_MODEM_CONTROL: // 0x02
+                                      txBuf[0] = GUDPDAT_FLOW_CONTROL_INDICATOR;
+                          txBuf[1] = 0;
+                          txBuf[2] = 2;
+                                      txBuf[3] = IOCTL_SERIAL_GET_MODEM_CONTROL_REPLY; // 0xA2
+                                      txBuf[4] = HSUR2_GetModemControl();
+                                      TCPIP_UdpSend(gudpdat_Conns[id].UdpSocket, 0, 0, &txBuf, 5);
+C51 COMPILER V9.05   GUDPDAT                                                               03/25/2012 20:16:55 PAGE 11  
+
+                                      break;
+                              case IOCTL_SERIAL_GET_MODEM_STATUS: // 0x03
+                                      txBuf[0] = GUDPDAT_FLOW_CONTROL_INDICATOR;
+                          txBuf[1] = 0;
+                          txBuf[2] = 2;
+                                      txBuf[3] = IOCTL_SERIAL_GET_MODEM_STATUS_REPLY; // 0xA3
+                                      txBuf[4] = HSUR2_GetModemStatus(TRUE);
+                                      TCPIP_UdpSend(gudpdat_Conns[id].UdpSocket, 0, 0, &txBuf, 5);
+                                      break;
+                              case IOCTL_SERIAL_CLR_DTR: // 0x11
+                                      HSUR2_ClearDTR();
+                                      break;
+                              case IOCTL_SERIAL_CLR_RTS: // 0x12
+                                      HSUR2_ClearRTS();               
+                                      break;
+                              case IOCTL_SERIAL_SET_DTR: // 0x13
+                                      HSUR2_SetDTR();
+                                      break;
+                              case IOCTL_SERIAL_SET_RTS: // 0x14
+                                      HSUR2_SetRTS();
+                                      break;
+                              case IOCTL_SERIAL_SET_BAUD_RATE: // 0x15                        
+                          HSUR2_SetupPort(GCONFIG_GetBaudRate(dat1), dat2);
+                                      break;
+                              case IOCTL_SERIAL_SET_BREAK_OFF: // 0x16
+                                      dat1 = HSUR2_GetLineControl();
+                                      HSUR2_SetLineControl(dat1 & 0xBF); // bit 6 - break control bit (1:on, 0:off)
+                                      break;
+                              case IOCTL_SERIAL_SET_BREAK_ON: // 0x17
+                                      dat1 = HSUR2_GetLineControl();
+                                      HSUR2_SetLineControl(dat1 | 0x40); // bit 6 - break control bit (1:on, 0:off)
+                                      break;
+                              case IOCTL_SERIAL_SET_FIFO_CONTROL: // 0x18
+                                      HSUR2_SetFifoControl(dat1);
+                                      break;
+                              case IOCTL_SERIAL_SET_LINE_CONTROL: // 0x19
+                                      HSUR2_SetLineControl(dat1);
+                                      break;
+                              case IOCTL_SERIAL_SET_MODEM_CONTROL: // 0x1A
+                                      HSUR2_SetModemControl(dat1);
+                                      break;
+                              case IOCTL_SERIAL_SET_XOFF: // 0x21
+                                      gudpdat_Conns[id].FlowControlXonRx = FALSE;
+                                      break;
+                              case IOCTL_SERIAL_SET_XON: // 0x22
+                                      gudpdat_Conns[id].FlowControlXonRx = TRUE;
+                                      break;
+                      case IOCTL_SERIAL_SET_HANDFLOW:
+                          gudpdat_SetFlowControl(dat1);
+                                      break;
+                              case IOCTL_SERIAL_XOFF_COUNTER: // 0x23
+                                      // Not support
+                                      break;
+              
+                              default:
+                                      printd("Unknown flow control command!\n\r");
+                                      break;
+                      }
+              } /* End of gudpdat_HandleFlowControlPacket() */
+              
+              /*
+               *--------------------------------------------------------------------------------
+C51 COMPILER V9.05   GUDPDAT                                                               03/25/2012 20:16:55 PAGE 12  
+
+               * void gudpdat_SetFlowControl(U8_T)
+               * Purpose: 
+               * Params : fCtrl: the flow control to be set.
+               * Returns: None.
+               * Note   : None.
+               *--------------------------------------------------------------------------------
+               */
+              static void gudpdat_SetFlowControl(U8_T fCtrl)
+              {
+                  switch (fCtrl)
+                  {
+                      case SERIAL_HANDFLOW_NONE:
+                          HSUR2_AutoCtsRtsFlowCtrl(0);
+                          HSUR2_AutoSoftwareFlowCtrl(0, 0, 0, 0, 0);
+                          break;
+                      case SERIAL_HANDFLOW_HW:
+                          HSUR2_AutoCtsRtsFlowCtrl(1);
+                          break;
+                      case SERIAL_HANDFLOW_XON_XOFF:
+                          HSUR2_AutoSoftwareFlowCtrl(1, (HSAFCSR_ASFCE_ENB), ASCII_XON, ASCII_XOFF, 0);
+                          break;
+                      default:
+                          break;
+                  }
+              }
+              #endif
+ 697          
+ 698          /*
+ 699           * ----------------------------------------------------------------------------
+ 700           * Function Name: GUDPDAT_GetTxBytes
+ 701           * Purpose: 
+ 702           * Params:
+ 703           * Returns:
+ 704           * Note:
+ 705           * ----------------------------------------------------------------------------
+ 706           */
+ 707          U32_T GUDPDAT_GetTxBytes(U8_T id)
+ 708          {
+ 709   1          if (id < GUDPDAT_MAX_CONNS)
+ 710   1              return gudpdat_Conns[id].UrTxBytes;
+ 711   1      
+ 712   1          return 0;
+ 713   1      } /* End of GUDPDAT_GetTxBytes() */
+ 714          
+ 715          /*
+ 716           * ----------------------------------------------------------------------------
+ 717           * Function Name: GUDPDAT_GetRxBytes
+ 718           * Purpose: 
+ 719           * Params:
+ 720           * Returns:
+ 721           * Note:
+ 722           * ----------------------------------------------------------------------------
+ 723           */
+ 724          U32_T GUDPDAT_GetRxBytes(U8_T id)
+ 725          {
+ 726   1          if (id < GUDPDAT_MAX_CONNS)
+ 727   1              return gudpdat_Conns[id].UrRxBytes;
+ 728   1      
+ 729   1          return 0;
+ 730   1      } /* End of GUDPDAT_GetRxBytes() */
+ 731          
+ 732          /*
+C51 COMPILER V9.05   GUDPDAT                                                               03/25/2012 20:16:55 PAGE 13  
+
+ 733           * ----------------------------------------------------------------------------
+ 734           * Function Name: gudpdat_CheckAllConnStatusIdle
+ 735           * Purpose: 
+ 736           * Params:
+ 737           * Returns:
+ 738           * Note:
+ 739           * ----------------------------------------------------------------------------
+ 740           */
+ 741          static U8_T gudpdat_CheckAllConnStatusIdle(void)
+ 742          {
+ 743   1          U8_T id;
+ 744   1      
+ 745   1          for (id = 0; id < GUDPDAT_MAX_CONNS; id++)
+ 746   1          {
+ 747   2              if (gudpdat_Conns[id].State != GUDPDAT_STATE_FREE)
+ 748   2                  return 0;
+ 749   2          }
+ 750   1      
+ 751   1          return 1;
+ 752   1      } /* End of gudpdat_CheckAllConnStatusIdle() */
+ 753          
+ 754          /*
+ 755           * ----------------------------------------------------------------------------
+ 756           * Function Name: GUDPDAT_ConnClose
+ 757           * Purpose: 
+ 758           * Params:
+ 759           * Returns:
+ 760           * Note:
+ 761           * ----------------------------------------------------------------------------
+ 762           */
+ 763          void GUDPDAT_ConnClose(U32_T remoteIp, U16_T port)
+ 764          {
+ 765   1          U8_T id;
+ 766   1      
+ 767   1          for (id = 0; id < GUDPDAT_MAX_CONNS; id++)
+ 768   1          {
+ 769   2              if (gudpdat_Conns[id].State == GUDPDAT_STATE_CONNECTED)
+ 770   2              {
+ 771   3                  if (gudpdat_Conns[id].Ip == remoteIp && gudpdat_Conns[id].Port == port)
+ 772   3                  {
+ 773   4                      gudpdat_Conns[id].State = GUDPDAT_STATE_FREE;
+ 774   4                      TCPIP_UdpClose(gudpdat_Conns[id].UdpSocket);
+ 775   4                      if (gudpdat_CheckAllConnStatusIdle())
+ 776   4                          GS2W_SetTaskState(GS2W_STATE_IDLE);
+ 777   4                  }
+ 778   3              }
+ 779   2          }
+ 780   1      
+ 781   1      } /* End of GUDPDAT_ConnClose() */
+ 782          
+ 783          /* End of gudpdat.c */
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   4279    ----
+   CONSTANT SIZE    =    205    ----
+   XDATA SIZE       =   1517      46
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+C51 COMPILER V9.05   GUDPDAT                                                               03/25/2012 20:16:55 PAGE 14  
+
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

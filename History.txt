@@ -1,0 +1,38 @@
+//======================================================================
+// AX22000 RS232-to-WiFi Reference Design 
+// Device Server Firmware Revision History
+//
+// This document describes the major changes, additions and bug fixes made 
+// to the Device Server Firmware between released versions. 
+//======================================================================
+Version 1.1.0 (2011-07-04)
+1. Upgrade the modules, madapter, mmac, mdhcps, and mwif.
+2. Fixed the bug that failed to parse the recorder with a property as "disabled=true" in HTML file.
+3. Add WiFi wizard WEB pages.
+4. Enhance firmware upgrade to support bootloader and WCPU.
+5. Enhance apply button to support device rebooting on WEB page.
+6. Add e-mail box format checking on WEB page.
+7. Fixed the bug that WEP key will be cleared when press the cancel button on WEB page.
+8. Fixed the bug that WEP key display incorrectly, when the key string contain the char as a,b,c,d,e or f on WEB page.
+9. Fixed the bug that RTS field cannot display value 0 on WEB page.
+10. Add the function to handle DHCPF_RELEASE message.
+11. Add the check if received packet's src MAC is device MAC, dropped it.
+12. Fixed the bug of HTTPAPI_Short2Str(...) function on httpdapi.c and update httpd module to v1.2.0.
+13. Fixed the bug of command, setdr.
+14. Enhance the validation to prevent select AES/TKIP encrypion type in Ad-hoc mode on WEB page.
+15. Enhance the IP validation of CLI commands.
+16. Fixed the bug about set preamble command.
+17. Enhance the validation of DHCP server settings on CLI and WEB page.
+18. Fixed the issue that the input value cannot up to 65535 for some of CLI commands such as "setsrvport", "setdstport" and "transmitimer".
+19. Fixed the bug of sending DHCP DECLINE with wrong MAC address.
+20. Fixed the bug of DHCP server that wrong expiration time is assigned.
+21. Update mdhcpc module.
+22. Send 3 ARP request packets for detecting duplicated IP after client got IP.
+23. Modified the CONNECTING state to resend CONNECT message when device is UDP client in gudpdat.c until
+    received server's reply.
+24. Enable the function of sending DCHP renew after client got IP.
+25. Added the protection frame type configuration of WiFi on WEB page and CLI.
+26. Corrected the description about the maximum length in cli and web pages.
+
+Version 1.0.0 (2011-04-25)
+1. Initial release

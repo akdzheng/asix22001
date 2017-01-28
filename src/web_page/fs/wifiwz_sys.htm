@@ -1,0 +1,115 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>wifiwz_sys</title>
+<style type="text/css">
+<!--
+body{background-color: #EDEFEF;margin:0;}
+.wz{font-family: Verdana, Geneva, sans-serif;font-size: 0.33cm;color: #036;position:static;}
+.wz .title{padding:20px 0px 0px 100px; width:100%;font-size: 0.6cm;}
+.wz .msg{padding:20px 0px 0px 100px; width:100%;}
+.wz .msgerr{color: #F00;padding-left:10px;}
+.wz .item{text-align: right;padding:20px 20px 0px 0px;width:30%;}
+.wz .ipt{text-align: left;padding:20px 0px 0px 0px;width:60%;}
+.wz .smt{text-align: center;padding:50px 0px 0px 0px;}
+.wz .smt .btn{margin-left:30px;}
+.wz .prmt{font:bold 0.33cm Arial, Helvetica, sans-serif;color:#0000FF;}
+-->
+</style></head>
+<body>
+<table border="0" align="left" cellpadding="0" cellspacing="0"  style="width:100%">
+<form method="POST" onsubmit="return wzformchk(0);">  
+<tr class="wz">
+    <td class="title" colspan="2">Welcome to the WiFi Setup Wizard</td>
+</tr>
+<tr class="wz">
+    <td class="msg" colspan="2">This wizard helps you set up your device to join a WiFi access point <br>or set up its own security-enabled WiFi network. </td>
+</tr>
+<tr class="wz">
+    <td class="item">Network Mode:</td>
+	<td class="ipt"><select name="wznetworkmode" style="width: 150px" id="wznet">
+      <option value="0" selected >Infrastructure</option>
+      <option value="1"          >Ad hoc</option>
+    </select></td>
+</tr>
+<tr class="wz">
+    <td class="item">Channel:</td>
+	<td class="ipt"><select name="wzchannel" style="width: 150px">
+      <option value="0" selected >Auto</option>
+      <option value="1"          >1</option>
+      <option value="2"          >2</option>
+      <option value="3"          >3</option>
+      <option value="4"          >4</option>
+      <option value="5"          >5</option>
+      <option value="6"          >6</option>
+      <option value="7"          >7</option>
+      <option value="8"          >8</option>
+      <option value="9"          >9</option>
+      <option value="10"         >10</option>
+      <option value="11"         >11</option>
+    </select></td>
+</tr>
+<tr class="wz">
+    <td class="item">Service Area Name/SSID:</td>
+    <td class="ipt"><input name="wzssid" type="text" style="width: 150px" value="xlwtest" maxlength="31"/></td>
+</tr>
+<tr class="wz"><td>&nbsp;</td><td class="prmt">The service area name can be up to 31 characters.</td></tr>
+<tr class="wz">
+    <td class="item">Security Mode:</td>
+    <td class="ipt"><select name="wzscrtmode" style="width: 150px">
+      <option value="0" selected >No Security</option>
+      <option value="1"          >WEP 64</option>
+      <option value="2"          >WEP 128</option>
+      <option value="3"          >TKIP</option>
+      <option value="4"          >AES</option>
+    </select></td>
+</tr>
+<tr class="wz"><td>&nbsp;</td><td class="prmt">AES/TKIP is unsupported in Ad-hoc mode.</td></tr>
+<tr class="wz">
+    <td class="msg" colspan="2">To prevent outsiders from accessing your network, <br>we recommend you assign a security mode to your network.</td>
+</tr>
+<tr class="wz">
+    <td class="smt" colspan="2">
+	<input name="Next" type="submit" style="width: 60px" value="Next" class="btn"/>
+	<input name="Finish" type="submit" style="width: 60px" value="Finish" class="btn"/>
+	</td>
+</tr>
+</form>
+</table>
+<script language="JavaScript" type="text/javascript">
+<!--
+function wzformchk(idx){
+var items=document.forms[idx].elements, i, errFlag=0;
+for (i=0;i<items.length;i++){
+var errMsg="";
+if (items[i].name == "wzssid"){
+			if (items[i].value==""){
+				errMsg="You must enter a SSID";
+				errFlag++;
+			}
+		}else if (items[i].name=="wzscrtmode"){
+			if (items[i-3].selectedIndex==1 && (items[i].selectedIndex==3 || items[i].selectedIndex==4)){
+				errMsg="Invalid";
+				errFlag++;
+			}
+		}else
+			continue;
+var errSpan=document.createElement("span");
+errSpan.appendChild(document.createTextNode(errMsg));
+errSpan.className="msgerr";
+errParent=items[i].parentNode;
+		if (errParent.lastChild.className=="msgerr")
+			errParent.replaceChild(errSpan,errParent.lastChild);
+		else
+			errParent.appendChild(errSpan);
+	}
+	if (errFlag) 
+		return false;
+	else 
+		return true;
+}
+//-->
+</script>
+</body>
+</html>

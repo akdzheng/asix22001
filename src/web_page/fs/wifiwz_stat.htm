@@ -1,0 +1,91 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>wifiwz_stat</title>
+<style type="text/css">
+<!--
+body{background-color: #EDEFEF;margin:0;}
+.wz{font-family: Verdana, Geneva, sans-serif;font-size: 0.33cm;color: #036;position:static;}
+.wz .title{padding:20px 0px 0px 100px; width:100%;font-size: 0.6cm;}
+.wz .msg{padding:20px 0px 0px 100px; width:100%;}
+.wz .msgerr{color: #F00;padding-left:10px;}
+.wz .item{text-align: right;padding:20px 20px 0px 0px; width:30%;}
+.wz .ipt{text-align: left;padding:20px 0px 0px 0px;width:60%;}
+.wz .smt{text-align: center;padding:50px 0px 0px 0px;}
+.wz .smt .btn{margin-left:30px;}
+-->
+</style></head>
+<body>
+<table border="0" align="left" cellpadding="0" cellspacing="0" style="width:100%">
+<tr class="wz">
+    <td class="title" colspan="2">The Wizard Complete Successfully</td>
+</tr>
+<tr class="wz">
+    <td class="msg" colspan="2">Your WiFi network settings are as below. You can press "Accept" button to take effect.</td>
+</tr>
+<tr class="wz">
+    <td class="item">Network Setting:</td>
+	<td class="ipt" id="disp0"></td>
+</tr>
+<tr class="wz">
+    <td class="item">Channel:</td>
+	<td class="ipt" id="disp1"></td>
+</tr>
+<tr class="wz">
+    <td class="item">Sevice Area Name/SSID:</td>
+	<td class="ipt" id="disp2"></td>
+</tr>
+<tr class="wz">
+    <td class="item">Security Mode:</td>
+	<td class="ipt" id="disp3"></td>
+</tr>
+<tr class="wz">
+    <td class="item">Tx Data Rate:</td>
+	<td class="ipt" id="disp4"></td>
+</tr>
+<tr class="wz">
+    <td class="item">Transmission Power:</td>
+	<td class="ipt" id="disp5"></td>
+</tr>
+<tr class="wz">
+    <td class="item">Preamble:</td>
+	<td class="ipt" id="disp6"></td>
+</tr>
+<tr class="wz">
+    <td class="item">Beacon Interval:</td>
+	<td class="ipt" id="disp7"></td>
+</tr>
+<tr class="wz">
+    <td class="item">RTS Threshold:</td>
+	<td class="ipt" id="disp8"></td>
+</tr>
+<tr class="wz">
+    <td class="item">Auto Power Control:</td>
+	<td class="ipt" id="disp9"></td>
+</tr>
+<tr class="wz">
+    <td class="item">Protection Frame Type:</td>
+	<td class="ipt" id="disp10"></td>
+</tr>
+<form method="POST">  
+<tr class="wz">
+    <td class="smt" colspan="2">
+	<input name="Accept" type="button" style="width: 60px" value="Accept" onclick="window.parent.wifiWzAccept()" class="btn"/>
+	<input name="Back" type="submit" style="width: 60px" value="Back" class="btn"/>
+	</td>
+</tr>
+</form>  
+</table>
+<script language="javascript">
+<!--
+var wifiwzstat=document.getElementById("wifiwzstat"), display_item, i;
+if (wifiwzstat != null){
+var status_item = wifiwzstat.value.split("&");
+	for (i=0;status_item[i]!=null && (display_item=document.getElementById("disp"+i))!=null;i++)
+		display_item.innerHTML = status_item[i];
+}
+//-->
+</script>
+</body>
+</html>

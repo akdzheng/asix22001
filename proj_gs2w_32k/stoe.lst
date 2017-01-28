@@ -1,0 +1,968 @@
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 1   
+
+
+C51 COMPILER V9.05, COMPILATION OF MODULE STOE
+OBJECT MODULE PLACED IN .\stoe.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE ..\src\mmac\stoe.c LARGE OMF2 ROM(D16M) BROWSE INTVECTOR(0X8020) INCDIR(..\
+                    -src\main;..\src\mcpu;..\src\mswdma;..\src\uart0;..\src\mmstimer;..\src\mwif;..\src\madapter;..\src\mtcpip;..\src\mping;.
+                    -.\src\mpppoe;..\src\si2c;..\src\mdnsc;..\src\mconsole;..\src\mtelnet;..\src\meeprom;..\src\mmac;..\src\mdhcpc;..\src\mht
+                    -tp;..\src\mgs2wifi;..\src\mhsuart;..\src\msmtpc;..\src\web_page;..\src\mdhcps;..\src\mdebug;..\src\counter) DEFINE(Runti
+                    -meCodeAt32KH) VARBANKING DEBUG PRINT(.\stoe.lst) OBJECT(.\stoe.obj)
+
+line level    source
+
+   1          /*
+   2           ******************************************************************************
+   3           *     Copyright (c) 2010       ASIX Electronic Corporation      All rights reserved.
+   4           *
+   5           *     This is unpublished proprietary source code of ASIX Electronic Corporation
+   6           *
+   7           *     The copyright notice above does not evidence any actual or intended
+   8           *     publication of such source code.
+   9           ******************************************************************************
+  10           */
+  11          /*=============================================================================
+  12           * Module Name: stoe.c
+  13           * Purpose:
+  14           * Author:
+  15           * Date:
+  16           * Notes:
+  17           * $Log: stoe.c,v $
+  18           * no message
+  19           *
+  20           *=============================================================================
+  21           */
+  22          
+  23          /* INCLUDE FILE DECLARATIONS */
+  24          #include "ax22000.h"
+  25          #include "stoe.h"
+  26          #include "dma.h"
+  27          #include "delay.h"
+  28          #include "interrupt.h"
+  29          
+  30          #include "adapter.h"
+  31          #include "printd.h"
+  32          #include <intrins.h>
+  33          #include "uart0.h"
+  34          #include "at24c02.h"
+  35          #include "mcpu.h"
+  36          
+  37          /* NAMING CONSTANT DECLARATIONS */
+  38          #define XSTACKSIZE 64
+  39          
+  40          /* GLOBAL VARIABLES DECLARATIONS */
+  41          LOCAL_STATION XDATA* PNetStation = {0};
+  42          BUF_DESC_PAGE XDATA* PBDP = 0;
+  43          void (*STOE_RcvCallback)(U8_T XDATA*, U16_T, U8_T); /* call eth layer rcv process
+  44                                                                                                                  function. */
+  45          U8_T STOE_ConnectState = 0;
+  46          U8_T XDATA STOE_DROP_PKT = 0;
+  47          #if STOE_WIFI_QOS_SUPPORT
+  48            U8_T STOE_WiFiQosFlag = 0;
+  49            U8_T STOE_WiFiQos = 0;
+  50          #endif
+  51          
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 2   
+
+  52          /* LOCAL VARIABLES DECLARATIONS */
+  53          static U8_T XDATA stoe_BufferSize[STOE_SOCKET_BUFFER_SIZE] _at_ STOE_BDP_START_ADDR;
+  54          static U8_T XDATA stoe_InterruptStatus = 0;
+  55          static U8_T stoe_DeferredCnt=0;
+  56          
+  57          /* LOCAL SUBPROGRAM DECLARATIONS */
+  58          static void stoe_BdpInit(void);
+  59          #if (STOE_GET_INTSTATUS_MODE == STOE_INTERRUPT_MODE)
+                static void stoe_InterruptEnable(void);
+              #endif
+  62          static void stoe_StartOperate(void);
+  63          static void stoe_RcvHandle(void);
+  64          static U8_T stoe_CheckLink(U8_T* pbuf);
+  65          
+  66          /* Reserved xstack for the functions with reenterence in bootloader and runtime code will use those functi
+             -ons */
+  67          U8_T XDATA xStackBuf[XSTACKSIZE] _at_ (STOE_BDP_START_ADDR-XSTACKSIZE);
+  68          
+  69          /*
+  70           * ----------------------------------------------------------------------------
+  71           * Function Name: stoe_ReadReg
+  72           * Purpose:
+  73           * Params:
+  74           * Returns:
+  75           * Note:
+  76           * ----------------------------------------------------------------------------
+  77           */
+  78          void stoe_ReadReg(U8_T regaddr, U8_T XDATA* pbuf, U8_T length)
+  79          {
+  80   1              U8_T    isr;
+  81   1      
+  82   1              isr = EA;
+  83   1              EA = 0;
+  84   1              _nop_();
+  85   1              TCIR = regaddr;
+  86   1              while (length--)
+  87   1                      pbuf[length] = TDR;
+  88   1              EA = isr;
+  89   1      
+  90   1      } /* End of stoe_ReadReg */
+  91          
+  92          /*
+  93           * ----------------------------------------------------------------------------
+  94           * Function Name: stoe_WriteReg
+  95           * Purpose:
+  96           * Params:
+  97           * Returns:
+  98           * Note:
+  99           * ----------------------------------------------------------------------------
+ 100           */
+ 101          void stoe_WriteReg(U8_T regaddr, U8_T XDATA* pbuf, U8_T length)
+ 102          {
+ 103   1              U8_T    isr;
+ 104   1      
+ 105   1              isr = EA;
+ 106   1              EA = 0;
+ 107   1              while (length--)
+ 108   1                      TDR = pbuf[length];
+ 109   1              TCIR = regaddr;
+ 110   1              EA = isr;
+ 111   1      
+ 112   1      } /* End of stoe_WriteReg */
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 3   
+
+ 113          
+ 114          /*
+ 115           * ----------------------------------------------------------------------------
+ 116           * Function Name: STOE_Init
+ 117           * Purpose: to initial all registers and variables of STOE. 
+ 118           * Params: network_type -0: auto- negotiation
+ 119           *                                              -1: fixed 100 full speed.
+ 120           *                                              -2: fixed 100 half speed.
+ 121           *                                              -3: fixed 10 full speed.
+ 122           *                                              -4: fixed 10 half speed.
+ 123           * Returns: none
+ 124           * Note:
+ 125           * ----------------------------------------------------------------------------
+ 126           */
+ 127          void STOE_Init(U8_T network_type)
+ 128          {
+ 129   1              U8_T XDATA      temp[2];
+ 130   1              U8_T XDATA      value[8] = {0,0,0,0,0,0,0,0};
+ 131   1      #if (STOE_TRANSPARENT == STOE_NON_TRANSPARENT_MODE)
+                      U8_T            index, count;
+              #endif
+ 134   1      
+ 135   1      #ifdef RuntimeCodeAt32KH
+ 136   1              MCPU_ExecuteRuntimeFlag |= 0x01;
+ 137   1      #else
+                      MCPU_ExecuteRuntimeFlag = 0;
+              #endif
+ 140   1      
+ 141   1              /* set xmit & rcv memory. */
+ 142   1              stoe_BdpInit();
+ 143   1      
+ 144   1              PNetStation = &PBDP->NetStation;
+ 145   1      
+ 146   1      #if (STOE_TRANSPARENT == STOE_NON_TRANSPARENT_MODE)
+                      /* clear arp table */
+                      for (index = 0; index < 128 ; index++)
+                      {
+                              count = index * 2;
+                              stoe_WriteReg(STOE_ARP_ADDR_REG, &count, 1);
+                              stoe_WriteReg(STOE_ARP_DATA_REG, value, 6);
+                              count = ARP_CACHE_CMD_GO;
+                              stoe_WriteReg(STOE_ARP_CMD_REG, &count, 1);
+                              while (count & ARP_CACHE_CMD_GO)
+                                      stoe_ReadReg(STOE_ARP_CMD_REG, &count, 1);
+                      }
+              #endif
+ 159   1      
+ 160   1      #if (MAC_ARBIT_MODE == MAC_ARBIT_WIFI)
+ 161   1              /* Validate Subsystem ID of WCPU */
+ 162   1              MAC_ValidateSubsystemId();
+ 163   1      
+ 164   1              /* source IP */
+ 165   1              value[0] = MAC_WifiIp[0];
+ 166   1              value[1] = MAC_WifiIp[1];
+ 167   1              value[2] = MAC_WifiIp[2];
+ 168   1              value[3] = MAC_WifiIp[3];
+ 169   1              PNetStation->SecDefaultIP = *(U32_T XDATA*)value;
+ 170   1              PNetStation->SecStationIP = PNetStation->SecDefaultIP;
+ 171   1              
+ 172   1              stoe_WriteReg(STOE_IP_ADDR_REG, (U8_T XDATA*)&PNetStation->SecDefaultIP, 4);
+ 173   1      #else /* (MAC_ARBIT_MODE & MAC_ARBIT_ETH) */
+                      /* source IP */
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 4   
+
+                      if (MCPU_NoCfgEeprom()) // EEPROM disable
+                      {
+                              value[0] = MAC_Default->HwDefault[0x2D];
+                              value[1] = MAC_Default->HwDefault[0x2C];
+                              value[2] = MAC_Default->HwDefault[0x2B];
+                              value[3] = MAC_Default->HwDefault[0x2A];
+                      }
+                      else // Read EEPROM to load
+                      {
+                              EEPROM_Read(0x2A, 4, value +4);
+                              value[0] = value[7];
+                              value[1] = value[6];
+                              value[2] = value[5];
+                              value[3] = value[4];
+                      }
+                      PNetStation->DefaultIP = *(U32_T XDATA*)value;
+                      PNetStation->StationIP = PNetStation->DefaultIP;
+                      
+                      stoe_WriteReg(STOE_IP_ADDR_REG, (U8_T XDATA*)&PNetStation->DefaultIP, 4);
+              #endif
+ 195   1      
+ 196   1              /* subnet mask */
+ 197   1      #if (MAC_ARBIT_MODE == MAC_ARBIT_WIFI)
+ 198   1              value[0] = MAC_WifiSubMask[0];
+ 199   1              value[1] = MAC_WifiSubMask[1];
+ 200   1              value[2] = MAC_WifiSubMask[2];
+ 201   1              value[3] = MAC_WifiSubMask[3];
+ 202   1              PNetStation->SecDefaultMask = *(U32_T XDATA*)value;
+ 203   1              PNetStation->SecSubnetMask = PNetStation->SecDefaultMask;
+ 204   1              
+ 205   1              stoe_WriteReg(STOE_SUBNET_MASK_REG, (U8_T XDATA*)&PNetStation->SecDefaultMask, 4);
+ 206   1      #else /* (MAC_ARBIT_MODE & MAC_ARBIT_ETH) */
+                      if (MCPU_NoCfgEeprom()) // EEPROM disable
+                      {
+                              value[0] = MAC_Default->HwDefault[0x31];
+                              value[1] = MAC_Default->HwDefault[0x30];
+                              value[2] = MAC_Default->HwDefault[0x2F];
+                              value[3] = MAC_Default->HwDefault[0x2E];
+                      }
+                      else // Read EEPROM to load
+                      {
+                              EEPROM_Read(0x2E, 4, value +4);
+                              value[0] = value[7];
+                              value[1] = value[6];
+                              value[2] = value[5];
+                              value[3] = value[4];
+                      }
+                      PNetStation->DefaultMask = *(U32_T XDATA*)value;
+                      PNetStation->SubnetMask = PNetStation->DefaultMask;
+                      stoe_WriteReg(STOE_SUBNET_MASK_REG, (U8_T XDATA*)&PNetStation->DefaultMask, 4);
+              #endif
+ 226   1      
+ 227   1              /* gateway */
+ 228   1      #if (MAC_ARBIT_MODE == MAC_ARBIT_WIFI)
+ 229   1              PNetStation->SecDefaultGateway =
+ 230   1                      ((PNetStation->SecStationIP & PNetStation->SecSubnetMask) |1);
+ 231   1              if (PNetStation->SecStationIP == PNetStation->SecDefaultGateway)
+ 232   1              {
+ 233   2                      PNetStation->SecDefaultGateway |= (~PNetStation->SecSubnetMask);
+ 234   2                      PNetStation->SecDefaultGateway &= 0xfffffffe; 
+ 235   2              }
+ 236   1              PNetStation->SecGateway = PNetStation->SecDefaultGateway;
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 5   
+
+ 237   1              
+ 238   1              stoe_WriteReg(STOE_GATEWAY_IP_REG, (U8_T XDATA*)&PNetStation->SecGateway, 4);
+ 239   1      #else /* (MAC_ARBIT_MODE & MAC_ARBIT_ETH) */
+                      PNetStation->DefaultGateway =((PNetStation->StationIP &PNetStation->SubnetMask)|1);
+                      if (PNetStation->StationIP == PNetStation->DefaultGateway)
+                      {
+                              PNetStation->DefaultGateway |= (~PNetStation->SubnetMask);
+                              PNetStation->DefaultGateway &= 0xfffffffe; 
+                      }
+                      PNetStation->Gateway = PNetStation->DefaultGateway;
+                              
+                      stoe_WriteReg(STOE_GATEWAY_IP_REG, (U8_T XDATA*)&PNetStation->Gateway, 4);
+              #endif
+ 250   1      
+ 251   1              /* set L2 control register */
+ 252   1      #if (STOE_TRANSPARENT == STOE_TRANSPARENT_MODE)
+ 253   1              temp[0] = (RX_TRANSPARENT | TX_TRANSPARENT | RX_VLAN_ENABLE);
+ 254   1      #else
+                      temp[0] = 0;
+              #endif
+ 257   1      
+ 258   1              stoe_WriteReg(STOE_L2_CTL_REG, temp, 1);
+ 259   1      
+ 260   1              /* set ARP table timeout register */
+ 261   1              temp[0] = STOE_ARP_TIMEOUT;
+ 262   1              stoe_WriteReg(STOE_ARP_TIMEOUT_REG, temp, 1);
+ 263   1      
+ 264   1              /* set L4 control register */
+ 265   1      #if (STOE_CHECKSUM_OFFLOAD)
+ 266   1              temp[0] = (DROP_CHKSUMERR_PKT | ENABLE_XMIT_CHKSUM | ENABLE_XMIT_CROSS);
+ 267   1      #else
+                      temp[0] = ENABLE_XMIT_CROSS;
+              #endif
+ 270   1              stoe_WriteReg(STOE_L4_CTL_REG, temp, 1);
+ 271   1      
+ 272   1              /* set BDP point */
+ 273   1              temp[0] = (STOE_BDP_START_ADDR >> 16);
+ 274   1              temp[1] = (STOE_BDP_START_ADDR >> 8);
+ 275   1              stoe_WriteReg(STOE_L4_BDP_PNT_REG, temp, 2);
+ 276   1      
+ 277   1              /* receive callback function initialize to null point. */
+ 278   1              STOE_RcvCallback = 0;
+ 279   1      
+ 280   1              DMA_Init();
+ 281   1              DELAY_Init();
+ 282   1              MAC_Init(network_type);
+ 283   1      
+ 284   1      #if (MAC_ARBIT_MODE == MAC_ARBIT_ETH)
+                      STOE_SetGateway(PNetStation->DefaultGateway);
+              #else /* (MAC_ARBIT_MODE == MAC_ARBIT_WIFI) */
+ 287   1              STOE_SetGateway(PNetStation->SecDefaultGateway);
+ 288   1      #endif
+ 289   1      
+ 290   1      } /* End of STOE_Init */
+ 291          
+ 292          /*
+ 293          * -----------------------------------------------------------------------------
+ 294           * Function Name: stoe_BdpInit
+ 295           * Purpose: initial Buffer Descriptor Page.
+ 296           * Params:
+ 297           * Returns:
+ 298           * Note:
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 6   
+
+ 299           * ----------------------------------------------------------------------------
+ 300           */
+ 301          void stoe_BdpInit(void)
+ 302          {
+ 303   1              U16_T   page = (STOE_BDP_START_ADDR >> 8);
+ 304   1      
+ 305   1              PBDP = STOE_BDP_START_ADDR;
+ 306   1      
+ 307   1              // set BDP number
+ 308   1              PBDP->BDP_ID = 0;
+ 309   1      
+ 310   1              // set rcv buffer.
+ 311   1              PBDP->RSPP = page + 1;
+ 312   1              PBDP->REPP = page + PAGES_OF_RCV;
+ 313   1              PBDP->RHPR = PBDP->RSPP;
+ 314   1              PBDP->RTPR = PBDP->RSPP;
+ 315   1              PBDP->RFP = PAGES_OF_RCV;
+ 316   1      
+ 317   1              // set xmit buffer.
+ 318   1              PBDP->TSPP = page + 1 + PAGES_OF_RCV;
+ 319   1              PBDP->TEPP = page + PAGES_OF_RCV + PAGES_OF_XMIT;
+ 320   1              PBDP->THPR = PBDP->TSPP;
+ 321   1              PBDP->TTPR = PBDP->TSPP;
+ 322   1              PBDP->TFP = PAGES_OF_XMIT;
+ 323   1      
+ 324   1              // set rcv and xmit start/end buffer address.
+ 325   1              PBDP->RcvStartAddr = STOE_BDP_START_ADDR + 256;
+ 326   1              PBDP->XmtStartAddr = PBDP->RcvStartAddr + STOE_RCV_BUF_SIZE;
+ 327   1              PBDP->RcvEndAddr = PBDP->XmtStartAddr - 1;
+ 328   1              PBDP->XmtEndAddr = PBDP->XmtStartAddr + STOE_XMIT_BUF_SIZE - 1;
+ 329   1      
+ 330   1      } /* End of stoe_BdpInit */
+ 331          
+ 332          /*
+ 333           * ----------------------------------------------------------------------------
+ 334           * Function Name: STOE_SetIPAddr
+ 335           * Purpose:
+ 336           * Params:      ip- IP Address
+ 337           * Returns:
+ 338           * Note:
+ 339           * ----------------------------------------------------------------------------
+ 340           */
+ 341          void STOE_SetIPAddr(U32_T ip)
+ 342          {
+ 343   1      #if (MAC_ARBIT_MODE == MAC_ARBIT_ETH)   
+                      if (ip != PNetStation->StationIP)
+                      {
+                              PNetStation->StationIP = ip;
+                              stoe_WriteReg(STOE_IP_ADDR_REG, (U8_T XDATA*)&PNetStation->StationIP, 4);
+                      }
+              #else /* (MAC_ARBIT_MODE == MAC_ARBIT_WIFI) */
+ 350   1              if (ip != PNetStation->SecStationIP)
+ 351   1              {
+ 352   2                      PNetStation->SecStationIP = ip;
+ 353   2                      stoe_WriteReg(STOE_IP_ADDR_REG, (U8_T XDATA*)&PNetStation->SecStationIP, 4);
+ 354   2              }
+ 355   1      #endif
+ 356   1      } /* End of STOE_SetIPAddr*/
+ 357          
+ 358          /*
+ 359           * ----------------------------------------------------------------------------
+ 360           * Function Name: STOE_SetSubnetMask
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 7   
+
+ 361           * Purpose:
+ 362           * Params:      subnet- Subnet Mask
+ 363           * Returns:
+ 364           * Note:
+ 365           * ----------------------------------------------------------------------------
+ 366           */
+ 367          void STOE_SetSubnetMask(U32_T subnet)
+ 368          {
+ 369   1      #if (MAC_ARBIT_MODE == MAC_ARBIT_ETH)   
+                      if (subnet != PNetStation->SubnetMask)
+                      {
+                              PNetStation->SubnetMask = subnet;
+                              stoe_WriteReg(STOE_SUBNET_MASK_REG, (U8_T XDATA*)&PNetStation->SubnetMask, 4);
+                      }
+              #else /* (MAC_ARBIT_MODE == MAC_ARBIT_WIFI) */
+ 376   1              if (subnet != PNetStation->SecSubnetMask)
+ 377   1              {
+ 378   2                      PNetStation->SecSubnetMask = subnet;
+ 379   2                      stoe_WriteReg(STOE_SUBNET_MASK_REG, (U8_T XDATA*)&PNetStation->SecSubnetMask, 4);
+ 380   2              }
+ 381   1      #endif
+ 382   1      } /* End of STOE_SetSubnetMask */
+ 383          
+ 384          /*
+ 385           * ----------------------------------------------------------------------------
+ 386           * Function Name: STOE_SetGateway
+ 387           * Purpose:
+ 388           * Params:      gateway- Gateway
+ 389           * Returns:
+ 390           * Note:
+ 391           * ----------------------------------------------------------------------------
+ 392           */
+ 393          void STOE_SetGateway(U32_T gateway)
+ 394          {
+ 395   1      #if (MAC_ARBIT_MODE == MAC_ARBIT_ETH)   
+                      PNetStation->Gateway = gateway;
+                      if (gateway)
+                      {
+                              stoe_WriteReg(STOE_GATEWAY_IP_REG, (U8_T XDATA*)&PNetStation->Gateway, 4);
+                              ETH_RestartSendArpToGateway();
+                      }
+                      else
+                      {
+                              gateway = ((PNetStation->StationIP & PNetStation->SubnetMask) | 1);
+                              if (PNetStation->StationIP == gateway)
+                              {
+                                      gateway |= (~PNetStation->SubnetMask);
+                                      gateway &= 0xfffffffe;
+                                      PNetStation->Gateway = gateway;
+                              }
+              
+                              stoe_WriteReg(STOE_GATEWAY_IP_REG, (U8_T XDATA*)&PNetStation->Gateway, 4);
+                              }
+              #else /* (MAC_ARBIT_MODE == MAC_ARBIT_WIFI) */
+ 415   1              PNetStation->SecGateway = gateway;
+ 416   1              if (gateway)
+ 417   1              {
+ 418   2                      stoe_WriteReg(STOE_GATEWAY_IP_REG, (U8_T XDATA*)&PNetStation->SecGateway, 4);
+ 419   2                      ETH_RestartSendArpToGateway();
+ 420   2              }
+ 421   1              else
+ 422   1              {
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 8   
+
+ 423   2                      gateway = ((PNetStation->SecStationIP & PNetStation->SecSubnetMask) | 1);
+ 424   2                      if (PNetStation->SecStationIP == gateway)
+ 425   2                      {
+ 426   3                              gateway |= (~PNetStation->SecSubnetMask);
+ 427   3                              gateway &= 0xfffffffe;
+ 428   3                              PNetStation->SecGateway = gateway;
+ 429   3                      }
+ 430   2      
+ 431   2                      stoe_WriteReg(STOE_GATEWAY_IP_REG, (U8_T XDATA*)&PNetStation->SecGateway, 4);
+ 432   2              }
+ 433   1      
+ 434   1      #endif
+ 435   1      } /* End of STOE_SetGateway */
+ 436          
+ 437          /*
+ 438           * ----------------------------------------------------------------------------
+ 439           * Function Name: STOE_Start
+ 440           * Purpose: enable all used interrupts and set some register to start
+ 441           *                      timer, software-dma and processing received packets.
+ 442           * Params:
+ 443           * Returns:
+ 444           * Note:
+ 445           * ----------------------------------------------------------------------------
+ 446           */
+ 447          void STOE_Start(void)
+ 448          {
+ 449   1              U8_T XDATA      temp;
+ 450   1      
+ 451   1              /* clear interrupt status */
+ 452   1              stoe_ReadReg(STOE_INT_STATUS_REG, &temp, 1);
+ 453   1      
+ 454   1      #if (STOE_GET_INTSTATUS_MODE == STOE_INTERRUPT_MODE)
+                      /* enable STOE interrupt */
+                      stoe_InterruptEnable();
+              #endif
+ 458   1      
+ 459   1              /* start STOE L2/L3/L4 engines*/
+ 460   1              stoe_StartOperate();
+ 461   1      
+ 462   1              /* start DMA module */
+ 463   1              DMA_Start();
+ 464   1      
+ 465   1              /* start MAC module */
+ 466   1              MAC_Start();
+ 467   1      
+ 468   1              EXTINT4(1);     /* Enable INT4 interrupt for stoe & mac modules. */
+ 469   1      
+ 470   1      } /* End of STOE_Start */
+ 471          
+ 472          #if (STOE_GET_INTSTATUS_MODE == STOE_INTERRUPT_MODE)
+              /*
+               * ----------------------------------------------------------------------------
+               * Function Name: stoe_InterruptEnable
+               * Purpose: enable STOE used interrupt
+               * Params:
+               * Returns:
+               * Note:
+               * ----------------------------------------------------------------------------
+               */
+              void stoe_InterruptEnable(void)
+              {
+                      U8_T XDATA      temp;
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 9   
+
+              
+                      temp = STOE_DEFAULT_INT_MASK;
+                      stoe_WriteReg(STOE_INT_MASK_REG, &temp, 1);
+              
+              } /* End of stoe_InterruptEnable */
+              
+              /*
+               * ----------------------------------------------------------------------------
+               * Function Name: stoe_InterruptDisable
+               * Purpose: disable STOE used interrupt
+               * Params:
+               * Returns:
+               * Note:
+               * ----------------------------------------------------------------------------
+               */
+              void stoe_InterruptDisable(void)
+              {
+                      U8_T XDATA      temp;
+              
+                      temp = 0;
+                      stoe_WriteReg(STOE_INT_MASK_REG, &temp, 1);
+              
+              } /* End of stoe_InterruptDisable */
+              
+              /*
+               * ----------------------------------------------------------------------------
+               * Function Name: STOE_SetInterruptFlag
+               * Purpose:
+               * Params:
+               * Returns:
+               * Note:
+               * ----------------------------------------------------------------------------
+               */
+              void STOE_SetInterruptFlag(void)
+              {
+                      U8_T XDATA      int_status;
+              
+                      /* disable stoe interrupt*/
+                      stoe_InterruptDisable();
+              
+                      /* read stoe interrupt status */
+                      stoe_ReadReg(STOE_INT_STATUS_REG, &int_status, 1);
+              
+                      stoe_InterruptStatus = (int_status & STOE_DEFAULT_INT_MASK);
+              
+              } /* End of STOE_SetInterruptFlag */
+              
+              /*
+               * ----------------------------------------------------------------------------
+               * Function Name: STOE_GetInterruptFlag
+               * Purpose:
+               * Params:
+               * Returns:
+               * Note:
+               * ----------------------------------------------------------------------------
+               */
+              U8_T STOE_GetInterruptFlag(void)
+              {
+                      return stoe_InterruptStatus;
+              
+              } /* End of STOE_GetInterruptFlag */
+              
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 10  
+
+              /*
+               * ----------------------------------------------------------------------------
+               * Function Name: STOE_ProcessInterrupt
+               * Purpose: When STOE interrupt is trigged, programmer can call this function
+               *                      to process interrupt event. 
+               * Params:
+               * Returns:
+               * Note:
+               * ----------------------------------------------------------------------------
+               */
+              void STOE_ProcessInterrupt(void)
+              {
+                      U8_T XDATA      temp;
+                      U8_T            isr = EA;
+              
+                      while (stoe_InterruptStatus)
+                      {
+                              EA = isr;
+              
+                              if (stoe_InterruptStatus & RCV_PACKET)
+                              {
+                                      while (PBDP->RFP < PAGES_OF_RCV)
+                                              stoe_RcvHandle();
+                              }
+                              if (stoe_InterruptStatus & RCV_BUF_RING_FULL)
+                              {
+                                      temp = RESUME_PKT_RCV;
+                                      stoe_WriteReg(STOE_L4_CMD_REG, &temp, 1);
+                              }
+              
+                              isr = EA;
+                              EA = 0;
+              
+                              /* read stoe interrupt status */
+                              stoe_ReadReg(STOE_INT_STATUS_REG, &stoe_InterruptStatus, 1);
+                              stoe_InterruptStatus &= STOE_DEFAULT_INT_MASK;
+                      }
+              
+                      /* enable stoe interrupt */
+                      stoe_InterruptEnable();
+                      EA = isr;
+              
+              } /* End of STOE_ProcessInterrupt() */
+              #else
+ 591          /*
+ 592           * ----------------------------------------------------------------------------
+ 593           * Function Name: STOE_ProcessInterrupt
+ 594           * Purpose: programmer can call this function by polling type to find that
+ 595           *                      interrupt event had happened.
+ 596           * Params:
+ 597           * Returns:
+ 598           * Note:
+ 599           * ----------------------------------------------------------------------------
+ 600           */
+ 601          void STOE_ProcessInterrupt(void)
+ 602          {
+ 603   1              U8_T XDATA                      temp;
+ 604   1              U8_T                            stoe_Page;
+ 605   1              static U8_T                     count;
+ 606   1      
+ 607   1              count = 0;
+ 608   1              
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 11  
+
+ 609   1              EMDMR = BIT5;
+ 610   1              stoe_Page = PBDP->RFP;
+ 611   1              EMDMR = 0; 
+ 612   1              while (stoe_Page < PAGES_OF_RCV)
+ 613   1              {
+ 614   2                      stoe_RcvHandle();
+ 615   2      
+ 616   2                      if (++count > 3)
+ 617   2                      {
+ 618   3                              break;
+ 619   3                      }
+ 620   2      
+ 621   2                      EMDMR = BIT5;
+ 622   2                      stoe_Page = PBDP->RFP;
+ 623   2                      EMDMR = 0; 
+ 624   2              }
+ 625   1      
+ 626   1              /* read stoe interrupt status */
+ 627   1              stoe_ReadReg(STOE_INT_STATUS_REG, &stoe_InterruptStatus, 1);
+ 628   1      
+ 629   1              if (stoe_InterruptStatus & RCV_BUF_RING_FULL)
+ 630   1              {
+ 631   2                      temp = RESUME_PKT_RCV;
+ 632   2                      stoe_WriteReg(STOE_L4_CMD_REG, &temp, 1);
+ 633   2              }
+ 634   1      }
+ 635          
+ 636          #endif
+ 637          
+ 638          /*
+ 639           * ----------------------------------------------------------------------------
+ 640           * Function Name: stoe_StartOperate
+ 641           * Purpose: start L2/L3/L4 engine
+ 642           * Params:
+ 643           * Returns:
+ 644           * Note:
+ 645           * ----------------------------------------------------------------------------
+ 646           */
+ 647          void stoe_StartOperate(void)
+ 648          {
+ 649   1              U8_T XDATA      temp;
+ 650   1      
+ 651   1              stoe_ReadReg(STOE_L2_CTL_REG, &temp, 1);
+ 652   1      
+ 653   1              temp |= (RX_START_OPERA | TX_START_OPERA);
+ 654   1              stoe_WriteReg(STOE_L2_CTL_REG, &temp, 1);
+ 655   1      
+ 656   1      } /* End of stoe_StartOperate */
+ 657          
+ 658          #if 0
+              /*
+               * ----------------------------------------------------------------------------
+               * Function Name: stoe_StopOperate
+               * Purpose: stop L2/L3/L4 engine
+               * Params:
+               * Returns:
+               * Note:
+               * ----------------------------------------------------------------------------
+               */
+              void stoe_StopOperate(void)
+              {
+                      U8_T XDATA      temp;
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 12  
+
+              
+                      stoe_ReadReg(STOE_L2_CTL_REG, &temp, 1);
+              
+                      Temp &= ~(RX_START_OPERA | TX_START_OPERA);
+                      stoe_WriteReg(STOE_L2_CTL_REG, &temp, 1);
+              
+              } /* End of stoe_StopOperate */
+              #endif
+ 679          
+ 680          /*
+ 681          * -----------------------------------------------------------------------------
+ 682           * Function Name: stoe_RcvHandle
+ 683           * Purpose: 
+ 684           * Params: 
+ 685           * Returns:
+ 686           * Note:
+ 687           * ----------------------------------------------------------------------------
+ 688           */
+ 689          void stoe_RcvHandle(void)
+ 690          {
+ 691   1              static STOE_FRAME_HEADER XDATA* pframe;
+ 692   1              U16_T   length;
+ 693   1              U8_T    pages;
+ 694   1      
+ 695   1              pframe = ((PBDP->RHPR) << 8);
+ 696   1              length = (pframe->Length & 0x7ff);
+ 697   1      
+ 698   1              if (length > 1536)
+ 699   1              {
+ 700   2                      return;
+ 701   2              }
+ 702   1      
+ 703   1              PBDP->STOE_RxInform.Protocol = pframe->Protocol;
+ 704   1              PBDP->STOE_RxInform.TotalLen = length;
+ 705   1              PBDP->STOE_RxInform.PBuf = &pframe->Packet;
+ 706   1      
+ 707   1              if (length && STOE_RcvCallback)
+ 708   1                      STOE_RcvCallback(&pframe->Packet, length, pframe->Protocol);
+ 709   1      
+ 710   1              if (PBDP->RHPR > pframe->NPR)
+ 711   1                      pages = (PBDP->TSPP - PBDP->RHPR) + (pframe->NPR - PBDP->RSPP);
+ 712   1              else
+ 713   1                      pages = pframe->NPR - PBDP->RHPR;
+ 714   1      
+ 715   1              EMDMR = BIT5;
+ 716   1              PBDP->RHPR = pframe->NPR;
+ 717   1              PBDP->RFP += pages;
+ 718   1              EMDMR = 0;
+ 719   1      
+ 720   1      } /* End of stoe_RcvHandle() */
+ 721          
+ 722          /*
+ 723          * -----------------------------------------------------------------------------
+ 724           * Function Name: stoe_XmitHandle
+ 725           * Purpose: Set send packet bit to tell hardware transmit one packet to ethernet.
+ 726           * Params: 
+ 727           * Returns:     
+ 728           * Note:
+ 729           * ----------------------------------------------------------------------------
+ 730           */
+ 731          void stoe_XmitHandle(void)
+ 732          {
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 13  
+
+ 733   1              U8_T XDATA      temp;
+ 734   1      
+ 735   1          /* Check the tx available */
+ 736   1          stoe_ReadReg(STOE_L4_CMD_REG, &temp, 1);
+ 737   1          if (!(temp & XMIT_PACKET))
+ 738   1          {
+ 739   2              temp = XMIT_PACKET;
+ 740   2              stoe_WriteReg(STOE_L4_CMD_REG, &temp, 1);
+ 741   2          }
+ 742   1          else
+ 743   1              stoe_DeferredCnt++;
+ 744   1      
+ 745   1      } /* stoe_XmitHandle */
+ 746          
+ 747          /*
+ 748          * -----------------------------------------------------------------------------
+ 749           * Function Name: STOE_DeferredProcess
+ 750           * Purpose: Check the packet was deferred and send it if the tx is available.
+ 751           * Params: 
+ 752           * Returns:     
+ 753           * Note:
+ 754           * ----------------------------------------------------------------------------
+ 755           */
+ 756          void STOE_DeferredProcess(void)
+ 757          {
+ 758   1              U8_T XDATA      temp;
+ 759   1      
+ 760   1          if (stoe_DeferredCnt)
+ 761   1          {
+ 762   2              /* Check the tx available */
+ 763   2              stoe_ReadReg(STOE_L4_CMD_REG, &temp, 1);
+ 764   2              if (!(temp & XMIT_PACKET))
+ 765   2              {
+ 766   3                  temp = XMIT_PACKET;
+ 767   3                  stoe_WriteReg(STOE_L4_CMD_REG, &temp, 1);
+ 768   3                  stoe_DeferredCnt--;
+ 769   3              }
+ 770   2          }
+ 771   1      } /* STOE_DeferredProcess */
+ 772          
+ 773          /*
+ 774          * -----------------------------------------------------------------------------
+ 775           * Function Name: STOE_Send
+ 776           * Purpose:     Call this function to set add STOE header.
+ 777           * Params:      pbuf : buffer address, must between TSPP and TEPP.
+ 778           *                      length : packet length.
+ 779           *                      protocol : if the packet is ip packet, set the ip layer protocol,
+ 780           *                                              if not a ip packet, set value to 0xff.
+ 781           * Returns:
+ 782           * Note:
+ 783           * ----------------------------------------------------------------------------
+ 784           */
+ 785          void STOE_Send(U8_T XDATA* pbuf, U16_T length, U8_T protocol)
+ 786          {
+ 787   1              STOE_FRAME_HEADER XDATA*        pframe = (STOE_FRAME_HEADER XDATA*)pbuf;
+ 788   1              U8_T    occupypages = PBDP->STOE_TxInform.Pages;
+ 789   1      
+ 790   1              pframe->Length = length;
+ 791   1              pframe->Protocol = protocol;
+ 792   1      
+ 793   1              EMDMR = BIT5;
+ 794   1              PBDP->TFP -= occupypages;
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 14  
+
+ 795   1      
+ 796   1              PBDP->TTPR += occupypages;
+ 797   1              if (PBDP->TTPR > PBDP->TEPP)
+ 798   1              {
+ 799   2                      PBDP->TTPR = PBDP->TSPP + PBDP->TTPR - PBDP->TEPP - 1;
+ 800   2              }
+ 801   1              EMDMR = 0;
+ 802   1      
+ 803   1              pframe->NPR = PBDP->TTPR;
+ 804   1      
+ 805   1              stoe_XmitHandle();
+ 806   1      
+ 807   1      } /* End of STOE_Send() */
+ 808          
+ 809          
+ 810          /*
+ 811          * -----------------------------------------------------------------------------
+ 812           * Function Name: STOE_AssignSendBuf
+ 813           * Purpose: Assign a buffer that adress is between TSPP and TEPP, so STOE engine
+ 814           *                              cans transmit the packet to MAC SRAM.
+ 815           * Params: length : Buffer size that the packet occupied.
+ 816           * Returns: Assigned transmit buffer address
+ 817           * Note:
+ 818           * ----------------------------------------------------------------------------
+ 819           */
+ 820          U8_T XDATA* STOE_AssignSendBuf(U16_T length)
+ 821          {
+ 822   1              U8_T XDATA*     pframe;
+ 823   1              U8_T            occupypages;
+ 824   1      
+ 825   1              occupypages = ((length + PAGE_SIZE - 1)/PAGE_SIZE);
+ 826   1              if (PBDP->TFP <= occupypages)
+ 827   1          {
+ 828   2                      return (U8_T XDATA*)0;
+ 829   2          }
+ 830   1      
+ 831   1              pframe = ((PBDP->TTPR) << 8);
+ 832   1              PBDP->STOE_TxInform.Pages = occupypages;
+ 833   1      
+ 834   1              return pframe;
+ 835   1      
+ 836   1      } /* End of STOE_AssignSendBuf */
+ 837          
+ 838          #if STOE_DEBUG
+ 839          /*
+ 840           * ----------------------------------------------------------------------------
+ 841           * Function Name: STOE_IndirectIO
+ 842           * Purpose: stoe indirect register read/write, only for debugging.
+ 843           * Params:
+ 844           * Returns:
+ 845           * Note:
+ 846           * ----------------------------------------------------------------------------
+ 847           */
+ 848          U8_T STOE_IndirectIO(U8_T rw, U16_T index, U8_T XDATA* pbuf)
+ 849          {
+ 850   1              U8_T len;
+ 851   1      
+ 852   1              switch (index)
+ 853   1              {
+ 854   2              case STOE_ARP_DATA_REG:
+ 855   2                      len = 6;
+ 856   2                      break;
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 15  
+
+ 857   2              case STOE_IP_ADDR_REG:
+ 858   2                      if (rw == 1)
+ 859   2                              STOE_SetIPAddr(*(U32_T XDATA*)pbuf);
+ 860   2                      len = 4;
+ 861   2                      break;
+ 862   2              case STOE_SUBNET_MASK_REG:
+ 863   2                      if (rw == 1)
+ 864   2                              STOE_SetSubnetMask(*(U32_T XDATA*)pbuf);
+ 865   2                      len = 4;
+ 866   2                      break;
+ 867   2              case STOE_GATEWAY_IP_REG:
+ 868   2                      if (rw == 1)
+ 869   2                              STOE_SetGateway(*(U32_T XDATA*)pbuf);
+ 870   2                      len = 4;
+ 871   2                      break;
+ 872   2              case STOE_RX_VLAN_TAG_REG:
+ 873   2              case STOE_TX_VLAN_TAG_REG:
+ 874   2              case STOE_L4_BDP_PNT_REG:
+ 875   2                      len = 2;
+ 876   2                      break;
+ 877   2              case STOE_L2_CTL_REG:
+ 878   2              case STOE_BYPASS_REG:
+ 879   2              case STOE_ARP_CMD_REG:
+ 880   2              case STOE_ARP_ADDR_REG:
+ 881   2              case STOE_ARP_TIMEOUT_REG:
+ 882   2              case STOE_CHKSUM_STATUS_REG:
+ 883   2              case STOE_L4_CTL_REG:
+ 884   2              case STOE_L4_CMD_REG:
+ 885   2              case STOE_L4_DMA_BURST_REG:
+ 886   2              case STOE_INT_STATUS_REG:
+ 887   2              case STOE_INT_MASK_REG:
+ 888   2                      len = 1;
+ 889   2                      break;
+ 890   2              default:
+ 891   2                      return 0xff;
+ 892   2              }
+ 893   1      
+ 894   1              if (rw == 0) /* read */
+ 895   1                      stoe_ReadReg (index, pbuf, len);
+ 896   1              else if (rw == 1) /* write */
+ 897   1                      stoe_WriteReg (index, pbuf, len);
+ 898   1              else
+ 899   1                      return 0xff;
+ 900   1      
+ 901   1              return  len;
+ 902   1      
+ 903   1      } /* End of STOE_IndirectIO() */
+ 904          #endif
+ 905          
+ 906          /* End of stoe.c */
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   3928    ----
+   CONSTANT SIZE    =      8    ----
+   XDATA SIZE       =     16      41
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+C51 COMPILER V9.05   STOE                                                                  04/11/2012 16:46:59 PAGE 16  
+
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

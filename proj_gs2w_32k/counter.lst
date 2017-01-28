@@ -1,0 +1,50 @@
+C51 COMPILER V9.05   COUNTER                                                               03/02/2012 02:31:05 PAGE 1   
+
+
+C51 COMPILER V9.05, COMPILATION OF MODULE COUNTER
+OBJECT MODULE PLACED IN .\counter.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE ..\src\counter\counter.c LARGE OMF2 ROM(D16M) BROWSE INTVECTOR(0X8020) INCD
+                    -IR(..\src\main;..\src\mcpu;..\src\mswdma;..\src\uart0;..\src\mmstimer;..\src\mwif;..\src\madapter;..\src\mtcpip;..\src\m
+                    -ping;..\src\mpppoe;..\src\si2c;..\src\mdnsc;..\src\mconsole;..\src\mtelnet;..\src\meeprom;..\src\mmac;..\src\mdhcpc;..\s
+                    -rc\mhttp;..\src\mgs2wifi;..\src\mhsuart;..\src\msmtpc;..\src\web_page;..\src\mdhcps;..\src\mdebug;..\src\counter) DEFINE
+                    -(RuntimeCodeAt32KH) VARBANKING DEBUG PRINT(.\counter.lst) OBJECT(.\counter.obj)
+
+line level    source
+
+   1          /*=============================================================================
+   2           * Module Name: counter.c
+   3           * Purpose:
+   4           * Author: zhengweihua
+   5           * Date: 2012-03-02
+   6           * Notes: 用于模块内部的各种统计数据
+   7           *
+   8           *=============================================================================*/
+   9          
+  10          #include <string.h>
+  11          
+  12          #include "counter.h"
+  13          
+  14          GCOUNTER_DATA XDATA g_counter;
+  15          
+  16          void COUNTER_Init()
+  17          {
+  18   1              memset(&g_counter, 0, sizeof(GCOUNTER_DATA));
+  19   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     16    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     16    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

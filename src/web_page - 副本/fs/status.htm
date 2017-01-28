@@ -1,0 +1,115 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>Status</title>
+<link href="axcss0.css" rel="stylesheet" type="text/css" />
+</head>
+<body>
+<table id="head">
+<tr><td class="utt"><a href="http://www.asix.com.tw" target="mainFrame">http://www.asix.com.tw</a></td></tr>
+<tr><td id="mimg">
+<img src="img/Logo.jpg" alt="" width="67" height="62" />
+<img src="img/asix.gif" alt="" width="95" height="24" id="asix"/>
+<span id="corp">ELECTRONICS CORPORATION</span>
+<span id="devname">AX220xx RS-232 to WiFi</span>
+</td></tr>
+<tr><td class="utt"><a href="index.htm">Logout</a></td></tr>
+<tr><td class="nvg">
+<ul>
+<li><a href="basic.htm">Basic</a></li>
+<li><a href="advanced.htm">Advanced</a></li>
+<li><a href="security.htm">Security</a></li>
+<li><a href="wifi.htm">WiFi</a></li>
+<li><a href="wifi_wz.htm">WiFi Wizard</a></li>
+<li id="fucs"><a href="status.htm">Status</a></li>
+</ul>
+</td></tr>
+</table>
+<table id="ctent">
+<tr><td><div>System Status</div></td></tr>
+<tr><td><label>Device Name:</label><label id="st0" style="width:400px">-</label></td></tr>
+<tr><td><label>Device IP Address:</label><label id="st1" style="width:400px">-</label></td></tr>
+<tr><td><label>MCPU Firmware Version:</label><label id="st2" style="width:400px">-</label></td></tr>
+<tr><td><label>WCPU Firmware Version:</label><label id="st3" style="width:400px">-</label></td></tr>
+<tr><td><label>WiFi MAC address(Hex):</label><label id="st4" style="width:400px">-</label></td></tr>
+<tr><td><label>Modem Status(HEX):</label><label id="st5" style="width:400px">-</label></td></tr>
+<tr><td><label>Protocol Type:</label><label id="st6" style="width:400px">-</label></td></tr>
+<tr><td><label>Connection Status:</label><label id="st7" style="width:400px">-</label></td></tr>
+<tr><td><label>Serial Port TX Count(Byte):</label><label id="st8" style="width:400px">-</label></td></tr>
+<tr><td><label>Serial Port RX Count(Byte):</label><label id="st9" style="width:400px">-</label></td></tr>
+<tr><td class="btn">
+<input type="button" id="refresh_st" value="RefreshStart" style="width:120px" onclick="uiCtrl(this.value);"/>
+<input type="button" id="refresh_sp" value="RefreshStop" style="width:120px" onclick="uiCtrl(this.value);"/>
+</td></tr>
+<tr><td>&nbsp;</td></tr>
+<tr><td bgcolor="#6c9fd2">&nbsp;<iframe id="ifr" src="hctent.htm?cmd=getstatus" style="visibility:hidden;position:absolute" tabIndex="-1"></iframe></td></tr>
+</table>
+<script src="axjs0.js" type="text/javascript"></script>
+<script language="JavaScript" type="text/javascript">
+<!--
+var rfTaskRuningFlag=0, rfTaskState=0, rfTaskTimeout, rfTimeId;
+uiCtrl('RefreshStart');
+function uiCtrl(uiCmd){
+	if (uiCmd=='RefreshStart'){
+		document.getElementById('refresh_st').disabled = true;
+		document.getElementById('refresh_sp').disabled = false;
+	    rfTaskRuningFlag=1;
+		rfTaskState=0;
+		rfTask();
+	}else if (uiCmd=='RefreshStop'){
+		document.getElementById('refresh_st').disabled = false;
+		document.getElementById('refresh_sp').disabled = true;
+	    rfTaskRuningFlag=0;
+	    clearTimeout(rfTimeId);
+	}
+}
+function sendSrvCmd(srvCmd){
+		document.getElementById("ifr").setAttribute("src","hctent.htm?cmd="+srvCmd);
+}
+function rfTask(){
+	switch (rfTaskState){
+	case 0:
+		sendSrvCmd('getstatus');
+		rfTaskTimeout=5;
+		rfTaskState=1;
+		break;
+	case 1:
+		if (rfTaskTimeout){
+			rfTaskTimeout--;
+	}else{
+			uiCtrl('RefreshStop');
+			alert('Refresh failure! cannot get the status information from server.');
+			return;
+	}
+		break;
+	case 2:
+		if (rfTaskTimeout)
+			rfTaskTimeout--;
+		else
+			rfTaskState=0;
+		break;
+	default :
+		rfTaskState=0;
+		break;
+}
+	if (rfTaskRuningFlag)
+		rfTimeId=setTimeout('rfTask()', 1000);
+}
+function rcvfunc(eles){
+var i,itemvals, display_item;
+	if (eles[0]==null)
+		return;
+itemvals = eles[0].value.split("&");
+	for (i=0;itemvals[i]!=null&&(display_item=document.getElementById("st"+i))!=null;i++){
+			display_item.innerHTML = itemvals[i];
+	}
+	if (rfTaskState==1){
+		rfTaskState=2;
+		rfTaskTimeout=1;
+	}
+}
+//-->
+</script>
+</body>
+</html>

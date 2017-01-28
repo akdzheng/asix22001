@@ -1,0 +1,1104 @@
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 1   
+
+
+C51 COMPILER V9.05, COMPILATION OF MODULE DHCPC
+OBJECT MODULE PLACED IN .\dhcpc.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE ..\src\mdhcpc\dhcpc.c LARGE OMF2 ROM(D16M) BROWSE INTVECTOR(0X8020) INCDIR(
+                    -..\src\main;..\src\mcpu;..\src\mswdma;..\src\uart0;..\src\mmstimer;..\src\mwif;..\src\madapter;..\src\mtcpip;..\src\mpin
+                    -g;..\src\mpppoe;..\src\si2c;..\src\mdnsc;..\src\mconsole;..\src\mtelnet;..\src\meeprom;..\src\mmac;..\src\mdhcpc;..\src\
+                    -mhttp;..\src\mgs2wifi;..\src\mhsuart;..\src\msmtpc;..\src\web_page;..\src\mdhcps;..\src\mdebug;..\src\counter) DEFINE(Ru
+                    -ntimeCodeAt32KH) VARBANKING DEBUG PRINT(.\dhcpc.lst) OBJECT(.\dhcpc.obj)
+
+line level    source
+
+   1          
+   2          
+   3          /* INCLUDE FILE DECLARATIONS */
+   4          #include <string.h>
+   5          #include "adapter.h"
+   6          #include "tcpip.h"
+   7          #include "stoe.h"
+   8          #include "mac.h"
+   9          #include "mstimer.h"
+  10          #include "dhcpc.h"
+  11          
+  12          
+  13          /* NAMING CONSTANT DECLARATIONS */
+  14          #define DHCPC_MESSAGE_NOT_FOR_ME        0
+  15          #define DHCPC_MESSAGE_FAIL                      1
+  16          #define DHCPC_MESSAGE_SUCCESS           2
+  17          
+  18          /* GLOBAL VARIABLES DECLARATIONS */
+  19          
+  20          
+  21          /* STATIC VARIABLE DECLARATIONS */
+  22          static DHCP_INFO        dhcpInfo;
+  23          static U8_T             dhcpConnID = 0;
+  24          static DHCP_HEADER      dhcpBuffer;
+  25          static U16_T            dhcp_curTime, dhcp_lastTime=0, dhcp_Time = 0;
+  26          static U8_T             dhcp_Retry = 0;
+  27          static U32_T            dhcpXid = 0;
+  28          static U8_T             dhcpMacAddr[6] = {0};
+  29          static U32_T            dhcp_LeaseTime = 0;
+  30          static U32_T            dhcp_LeaseTimerT1 = 0;
+  31          
+  32          /* LOCAL SUBPROGRAM DECLARATIONS */
+  33          void dhcp_Discover(void);
+  34          void dhcp_Request(U8_T bcast);
+  35          void dhcp_OptMagicCookie(void);
+  36          void dhcp_OptionsAppend(U8_T optCode, U8_T optLen, U8_T *optContent);
+  37          U8_T dhcp_ReceiveMessage(U16_T);
+  38          void dhcp_OptionCheck(U8_T msgType);
+  39          U8_T *dhcp_GetOption(U8_T *optMsg, U8_T msgCode, U8_T *vLen, U16_T);
+  40          
+  41          /*
+  42           *--------------------------------------------------------------------------------
+  43           * void DHCP_Init(void)
+  44           * Purpose :
+  45           * Params  :
+  46           * Returns :
+  47           * Note    :
+  48           *--------------------------------------------------------------------------------
+  49           */
+  50          BOOL DHCP_Init(void)
+  51          {
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 2   
+
+  52   1              dhcpInfo.AppId = TCPIP_Bind(NULL, DHCP_EventHandle, DHCP_ReceiveHandle); // assigned by TCP stack
+  53   1              dhcpInfo.State = DHCP_IDLE_STATE;
+  54   1      
+  55   1              return TRUE;
+  56   1      
+  57   1      } /* End of DHCP_Init() */
+  58          
+  59          /*
+  60           *--------------------------------------------------------------------------------
+  61           * void DHCPC_Task(void)
+  62           * Purpose :
+  63           * Params  :
+  64           * Returns :
+  65           * Note    :
+  66           *--------------------------------------------------------------------------------
+  67           */
+  68          void DHCPC_Task(void)
+  69          {
+  70   1          dhcp_curTime = (U16_T)SWTIMER_Tick();
+  71   1          if ((dhcp_curTime - dhcp_lastTime) >= SWTIMER_COUNT_SECOND)
+  72   1          {
+  73   2              dhcp_lastTime = dhcp_curTime;
+  74   2              DHCPC_LeaseTimeCheck();
+  75   2          }
+  76   1      
+  77   1      } /* End of DHCPC_Task() */
+  78          
+  79          /*
+  80           *--------------------------------------------------------------------------------
+  81           * void DHCP_ResetState(void)
+  82           * Purpose :
+  83           * Params  :
+  84           * Returns :
+  85           * Note    :
+  86           *--------------------------------------------------------------------------------
+  87           */
+  88          void DHCP_ResetState(void)
+  89          {
+  90   1              dhcpInfo.State = DHCP_IDLE_STATE;
+  91   1      } /* End of DHCP_ResetState() */
+  92          
+  93          /*
+  94           *--------------------------------------------------------------------------------
+  95           * void DHCP_Start(void)
+  96           * Purpose :
+  97           * Params  :
+  98           * Returns :
+  99           * Note    :
+ 100           *--------------------------------------------------------------------------------
+ 101           */
+ 102          void DHCP_Start(void)
+ 103          {
+ 104   1              U16_T   i;
+ 105   1              U8_T    *point;
+ 106   1      
+ 107   1              if (dhcpInfo.State > DHCP_IDLE_STATE)
+ 108   1                      return;
+ 109   1      
+ 110   1              /* set uip host ip address */
+ 111   1              TCPIP_SetIPAddr(0);
+ 112   1      
+ 113   1              /* set stoe host ip address */
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 3   
+
+ 114   1              STOE_SetIPAddr(0);
+ 115   1      
+ 116   1              dhcpInfo.pOpt = (U8_T *)(dhcpBuffer.Options);
+ 117   1              dhcpInfo.OptionsCounter = 0;
+ 118   1              dhcpInfo.Secs = 0;
+ 119   1              dhcpInfo.TimeoutInterval = DHCP_REQUEST_TIMEOUT;
+ 120   1              for (i=0 ; i<4 ; i++)
+ 121   1              {
+ 122   2                      dhcpInfo.ServerId[i] = 0;
+ 123   2                      dhcpInfo.ClientOfferedIp[i] = 0;
+ 124   2              }
+ 125   1              dhcpInfo.IpAddr = 0;
+ 126   1              dhcpInfo.NetMask = 0;
+ 127   1              dhcpInfo.DnsAddr = 0;
+ 128   1              dhcpInfo.DefaultRouter = 0;
+ 129   1              dhcpInfo.LeaseTime = 0;
+ 130   1      
+ 131   1              dhcpInfo.State = DHCP_INITIAL_STATE;
+ 132   1              dhcp_Retry = 0;
+ 133   1              dhcp_LeaseTime = 0;
+ 134   1              dhcp_LeaseTimerT1 = 0;
+ 135   1      
+ 136   1              point = MAC_GetMacAddr();
+ 137   1              for (i=0 ; i<MAC_ADDRESS_LEN ; i++)
+ 138   1                      dhcpMacAddr[i] = point[i];
+ 139   1              /* Transaction ID assign again with the lowest two bytes of each MAC address */
+ 140   1              dhcpXid = DHCP_CLIENT_XID | ((U32_T)dhcpMacAddr[4] << 8) | ((U32_T)dhcpMacAddr[5]);
+ 141   1              
+ 142   1      } /* End of DHCP_Start() */
+ 143          
+ 144          /*
+ 145           *--------------------------------------------------------------------------------
+ 146           * void DHCP_Send(void)
+ 147           * Purpose :
+ 148           * Params  :
+ 149           * Returns :
+ 150           * Note    :
+ 151           *--------------------------------------------------------------------------------
+ 152           */
+ 153          void DHCP_Send(void)
+ 154          {
+ 155   1              if (dhcpInfo.State == DHCP_INITIAL_STATE)
+ 156   1              {
+ 157   2                      dhcp_Discover();
+ 158   2                      dhcp_Time = (U16_T)SWTIMER_Tick();
+ 159   2              }
+ 160   1              else if (dhcpInfo.State == DHCP_RCV_OFFER_STATE)
+ 161   1              {
+ 162   2                      dhcp_Request(1);
+ 163   2                      dhcp_Time = (U16_T)SWTIMER_Tick();
+ 164   2              }
+ 165   1      
+ 166   1      } /* End of DHCP_Send() */
+ 167          
+ 168          /*
+ 169           * ----------------------------------------------------------------------------
+ 170           * void DHCP_EventHandle(U8_T connId, U8_T event)
+ 171           * Purpose: 
+ 172           * Params:
+ 173           * Returns:
+ 174           * Note:
+ 175           * ----------------------------------------------------------------------------
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 4   
+
+ 176           */
+ 177          void DHCP_EventHandle(U8_T connId, U8_T event)
+ 178          {
+ 179   1              if (connId != 0)
+ 180   1                      return;
+ 181   1      
+ 182   1              if (event == TCPIP_CONNECT_CANCEL)
+ 183   1              {
+ 184   2                      dhcpInfo.State = DHCP_IDLE_STATE;
+ 185   2                      TCPIP_UdpClose(dhcpInfo.SocketId);
+ 186   2              }
+ 187   1      }
+ 188          
+ 189          /*
+ 190           * ----------------------------------------------------------------------------
+ 191           * void DHCP_ReceiveHandle(U8_T XDATA* pData, U16_T length, U8_T connId)
+ 192           * Purpose: 
+ 193           * Params:
+ 194           * Returns:
+ 195           * Note:
+ 196           * ----------------------------------------------------------------------------
+ 197           */
+ 198          void DHCP_ReceiveHandle(U8_T XDATA *pData, U16_T length, U8_T connId)
+ 199          {
+ 200   1              U8_T    tmp;
+ 201   1      
+ 202   1              if (connId != 0)
+ 203   1                      return;
+ 204   1      
+ 205   1              dhcpInfo.dhcpPktPtr = (DHCP_HEADER *)pData;
+ 206   1      
+ 207   1              if (dhcpInfo.State == DHCP_DISCOVER_STATE)
+ 208   1              {
+ 209   2                      tmp = dhcp_ReceiveMessage(length);
+ 210   2                      if (tmp == DHCPC_MESSAGE_SUCCESS)
+ 211   2                      {
+ 212   3                              dhcpInfo.State = DHCP_RCV_OFFER_STATE;
+ 213   3                              return;
+ 214   3                      }
+ 215   2                      else if (tmp == DHCPC_MESSAGE_NOT_FOR_ME)
+ 216   2                              return;
+ 217   2                      else
+ 218   2                              dhcpInfo.State = DHCP_INITIAL_STATE;
+ 219   2              }
+ 220   1              else if (dhcpInfo.State == DHCP_REQUEST_STATE)
+ 221   1              {
+ 222   2                      tmp = dhcp_ReceiveMessage(length);
+ 223   2                      if (tmp == DHCPC_MESSAGE_SUCCESS)
+ 224   2                              dhcpInfo.State = DHCP_IDLE_STATE;
+ 225   2                      else if (tmp == DHCPC_MESSAGE_NOT_FOR_ME)
+ 226   2                              return;
+ 227   2                      else
+ 228   2                              dhcpInfo.State = DHCP_INITIAL_STATE;
+ 229   2              }
+ 230   1              else if (dhcpInfo.State == DHCP_RENEW_STATE)
+ 231   1              {
+ 232   2                      tmp = dhcp_ReceiveMessage(length);
+ 233   2                      if (tmp == DHCPC_MESSAGE_SUCCESS)
+ 234   2                              dhcpInfo.State = DHCP_IDLE_STATE;
+ 235   2                      else
+ 236   2                  return;
+ 237   2              }
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 5   
+
+ 238   1              else
+ 239   1                      return;
+ 240   1      
+ 241   1              TCPIP_UdpClose(dhcpInfo.SocketId);
+ 242   1      
+ 243   1      } /* End of DHCP_ReceiveHandle() */
+ 244          
+ 245          /*
+ 246           *--------------------------------------------------------------------------------
+ 247           * void DHCP_GetState(void)
+ 248           * Purpose :
+ 249           * Params  :
+ 250           * Returns :
+ 251           * Note    :
+ 252           *--------------------------------------------------------------------------------
+ 253           */
+ 254          S8_T DHCP_GetState(void)
+ 255          {
+ 256   1              if (dhcpInfo.State == DHCP_DISCOVER_STATE || dhcpInfo.State == DHCP_REQUEST_STATE)
+ 257   1              {
+ 258   2                      dhcp_curTime = (U16_T)SWTIMER_Tick();
+ 259   2                      if ((dhcp_curTime - dhcp_Time) >= DHCP_REQUEST_TIMEOUT) /* had timeout */
+ 260   2                      {
+ 261   3                              TCPIP_UdpClose(dhcpInfo.SocketId);
+ 262   3                              if (++dhcp_Retry < DHCP_MAX_RETRY)
+ 263   3                                      dhcpInfo.State = DHCP_INITIAL_STATE;
+ 264   3                              else
+ 265   3                                      dhcpInfo.State = DHCP_IDLE_STATE;
+ 266   3                      }
+ 267   2              }
+ 268   1              return dhcpInfo.State;
+ 269   1      }
+ 270          
+ 271          /*
+ 272           *--------------------------------------------------------------------------------
+ 273           * void dhcp_Discover(void)
+ 274           * Purpose :
+ 275           * Params  :
+ 276           * Returns :
+ 277           * Note    :
+ 278           *--------------------------------------------------------------------------------
+ 279           */
+ 280          void dhcp_Discover(void)
+ 281          {
+ 282   1              DHCP_HEADER             *pDiscover;
+ 283   1              U16_T                   addr[2] = {0, 0};
+ 284   1              U8_T                    optItem[3] = {0, 0, 0};
+ 285   1              U16_T                   i;
+ 286   1      
+ 287   1              /* assigned by stack */
+ 288   1              dhcpInfo.SocketId = TCPIP_UdpNew(dhcpInfo.AppId, dhcpConnID, DHCP_CLIENT_BROADCAST, (U16_T)DHCP_CLIENT_PO
+             -RT,
+ 289   1                                              (U16_T)DHCP_SERVER_PORT);
+ 290   1              if (dhcpInfo.SocketId == TCPIP_NO_NEW_CONN)
+ 291   1              {
+ 292   2                      return;
+ 293   2              }
+ 294   1      
+ 295   1              pDiscover = &dhcpBuffer;
+ 296   1      
+ 297   1              pDiscover->Op = DHCP_C_TO_S;
+ 298   1              pDiscover->Htype = DHCP_HTYPE_ETHERNET;
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 6   
+
+ 299   1              pDiscover->Hlen = DHCP_HLEN_ETHERNET;
+ 300   1              pDiscover->Hops = 0;
+ 301   1              pDiscover->Xid = dhcpXid;
+ 302   1              pDiscover->Seconds = dhcpInfo.Secs;
+ 303   1              pDiscover->Flags = 0x8000;
+ 304   1              pDiscover->CiAddr = 0;
+ 305   1              pDiscover->YiAddr = 0;
+ 306   1              pDiscover->SiAddr = 0;
+ 307   1              pDiscover->GiAddr = 0;
+ 308   1      
+ 309   1              for (i=0 ; i<DHCP_CHADDR_LEN ; i++)
+ 310   1              {
+ 311   2                      if (i < MAC_ADDRESS_LEN)
+ 312   2                              pDiscover->ChAddr[i] = dhcpMacAddr[i];
+ 313   2                      else
+ 314   2                              pDiscover->ChAddr[i] = 0;
+ 315   2              }
+ 316   1              for (i=0 ; i<DHCP_SNAME_LEN ; i++)
+ 317   1              {
+ 318   2                      pDiscover->Sname[i] = 0;
+ 319   2              }
+ 320   1              for (i=0 ; i<DHCP_FILE_LEN ; i++)
+ 321   1              {
+ 322   2                      pDiscover->File[i] = 0;
+ 323   2              }
+ 324   1      
+ 325   1              dhcpInfo.OptionsCounter = 0;
+ 326   1      
+ 327   1              /* Add magic cookie bytes */
+ 328   1              dhcpInfo.pOpt = &(pDiscover->Options);
+ 329   1              dhcp_OptMagicCookie();
+ 330   1      
+ 331   1              /* Add DHCP_DISCOVER option */
+ 332   1              optItem[0] = DHCP_DISCOVER;
+ 333   1              dhcp_OptionsAppend(DHCP_OPTION_MSG_TYPE, 1, optItem);
+ 334   1      
+ 335   1              /* Add DHCP_OPTION_PAR_REQ_LIST option */
+ 336   1              optItem[0] = DHCP_OPTION_SUBNET_MASK;
+ 337   1              optItem[1] = DHCP_OPTION_ROUTER;
+ 338   1              optItem[2] = DHCP_OPTION_DNS_SERVER;
+ 339   1              dhcp_OptionsAppend(DHCP_OPTION_PAR_REQ_LIST, 3, optItem);
+ 340   1      
+ 341   1              /* Add DHCP_OPTION_END option */
+ 342   1              optItem[0] = 0;
+ 343   1              dhcp_OptionsAppend(DHCP_OPTION_END, 0, optItem);
+ 344   1              
+ 345   1              while (dhcpInfo.OptionsCounter < DHCP_MIN_OPTIONS_LEN)
+ 346   1              {
+ 347   2                      pDiscover->Options[dhcpInfo.OptionsCounter ++] = 0;
+ 348   2              }
+ 349   1      
+ 350   1              TCPIP_UdpSend((dhcpInfo.SocketId), NULL, 0, (U8_T *)pDiscover, (U16_T)(DHCP_FIXED_LEN + dhcpInfo.OptionsC
+             -ounter));
+ 351   1      
+ 352   1              dhcpInfo.State = DHCP_DISCOVER_STATE;
+ 353   1      }
+ 354          
+ 355          /*
+ 356           *--------------------------------------------------------------------------------
+ 357           * void dhcp_Request(void)
+ 358           * Purpose :
+ 359           * Params  :
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 7   
+
+ 360           * Returns :
+ 361           * Note    :
+ 362           *--------------------------------------------------------------------------------
+ 363           */
+ 364          void dhcp_Request(U8_T bcast)
+ 365          {
+ 366   1              DHCP_HEADER             *pRequest;
+ 367   1              U16_T                   uip_addr[2] = {0, 0};
+ 368   1              U8_T                    optItem[3] = {0, 0, 0};
+ 369   1              U16_T                   i;
+ 370   1      
+ 371   1              pRequest = &dhcpBuffer;
+ 372   1      
+ 373   1              pRequest->Op = DHCP_C_TO_S;
+ 374   1              pRequest->Htype = DHCP_HTYPE_ETHERNET;
+ 375   1              pRequest->Hlen = DHCP_HLEN_ETHERNET;
+ 376   1              pRequest->Hops = 0;
+ 377   1              pRequest->Xid = dhcpXid;
+ 378   1              pRequest->Seconds = 0;
+ 379   1          if (bcast)
+ 380   1                  pRequest->Flags = 0x8000;
+ 381   1          else
+ 382   1              pRequest->Flags = 0;
+ 383   1              pRequest->CiAddr = dhcpInfo.IpAddr;
+ 384   1              pRequest->YiAddr = 0;
+ 385   1              pRequest->SiAddr = 0;
+ 386   1              pRequest->GiAddr = 0;
+ 387   1      
+ 388   1              for (i=0 ; i<DHCP_CHADDR_LEN ; i++)
+ 389   1              {
+ 390   2                      if (i < MAC_ADDRESS_LEN)
+ 391   2                              pRequest->ChAddr[i] = dhcpMacAddr[i];
+ 392   2                      else
+ 393   2                              pRequest->ChAddr[i] = 0;
+ 394   2              }
+ 395   1              for (i=0 ; i<DHCP_SNAME_LEN ; i++)
+ 396   1              {
+ 397   2                      pRequest->Sname[i] = 0;
+ 398   2              }
+ 399   1              for (i=0 ; i<DHCP_FILE_LEN ; i++)
+ 400   1              {
+ 401   2                      pRequest->File[i] = 0;
+ 402   2              }
+ 403   1      
+ 404   1              dhcpInfo.OptionsCounter = 0;
+ 405   1      
+ 406   1              /* Add magic cookie bytes */
+ 407   1              dhcpInfo.pOpt = &(pRequest->Options);
+ 408   1              dhcp_OptMagicCookie();
+ 409   1      
+ 410   1              /* Add DHCP_REQUEST option */
+ 411   1              optItem[0] = DHCP_REQUEST;
+ 412   1              dhcp_OptionsAppend(DHCP_OPTION_MSG_TYPE, 1, optItem);
+ 413   1      
+ 414   1          if (bcast)
+ 415   1          {
+ 416   2              /* Add DHCP_OPTION_REQ_IPADDR option */
+ 417   2              dhcp_OptionsAppend(DHCP_OPTION_REQ_IPADDR, 4, &(dhcpInfo.ClientOfferedIp[0]));
+ 418   2      
+ 419   2              /* Add DHCP_OPTION_SERVER_ID option */
+ 420   2              dhcp_OptionsAppend(DHCP_OPTION_SERVER_ID, 4, &(dhcpInfo.ServerId[0]));
+ 421   2          }
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 8   
+
+ 422   1              /* Add DHCP_OPTION_PAR_REQ_LIST option */
+ 423   1              optItem[0] = DHCP_OPTION_SUBNET_MASK;
+ 424   1              optItem[1] = DHCP_OPTION_ROUTER;
+ 425   1              optItem[2] = DHCP_OPTION_DNS_SERVER;
+ 426   1              dhcp_OptionsAppend(DHCP_OPTION_PAR_REQ_LIST, 3, optItem);
+ 427   1      
+ 428   1              /* Add DHCP_OPTION_END option */
+ 429   1              optItem[0] = 0;
+ 430   1              dhcp_OptionsAppend(DHCP_OPTION_END, 0, optItem);
+ 431   1              while ((dhcpInfo.OptionsCounter < DHCP_MIN_OPTIONS_LEN))
+ 432   1              {
+ 433   2                      pRequest->Options[dhcpInfo.OptionsCounter ++] = 0;
+ 434   2              }
+ 435   1      
+ 436   1              TCPIP_UdpSend((dhcpInfo.SocketId), NULL, 0, (U8_T *)pRequest, (U16_T)(DHCP_FIXED_LEN + dhcpInfo.OptionsCo
+             -unter));
+ 437   1      
+ 438   1              dhcpInfo.State = DHCP_REQUEST_STATE;
+ 439   1      }
+ 440          
+ 441          /*
+ 442           *--------------------------------------------------------------------------------
+ 443           * void DHCP_Release(void)
+ 444           * Purpose :
+ 445           * Params  :
+ 446           * Returns :
+ 447           * Note    :
+ 448           *--------------------------------------------------------------------------------
+ 449           */
+ 450          #if 0
+              void DHCP_Release(void)
+              {
+                      DHCP_HEADER             *pRelease;
+                      U8_T                    optItem[3] = {0, 0, 0};
+                      U16_T                   i;
+              
+                      pRelease = &dhcpBuffer;
+              
+                      pRelease->Op = DHCP_C_TO_S;
+                      pRelease->Htype = DHCP_HTYPE_ETHERNET;
+                      pRelease->Hlen = DHCP_HLEN_ETHERNET;
+                      pRelease->Hops = 0;
+                      pRelease->Xid = dhcpXid;
+                      pRelease->Seconds = 0;
+                      pRelease->Flags = 0;
+                      pRelease->CiAddr = dhcpInfo.IpAddr;
+                      pRelease->YiAddr = 0;
+                      pRelease->SiAddr = 0;
+                      pRelease->GiAddr = 0;
+                      for (i=0 ; i<DHCP_CHADDR_LEN ; i++)
+                      {
+                              if (i < MAC_ADDRESS_LEN)
+                                      pRelease->ChAddr[i] = dhcpMacAddr[i];
+                              else
+                                      pRelease->ChAddr[i] = 0;
+                      }
+                      for (i=0 ; i<DHCP_SNAME_LEN ; i++)
+                      {
+                              pRelease->Sname[i] = 0;
+                      }
+                      for (i=0 ; i<DHCP_FILE_LEN ; i++)
+                      {
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 9   
+
+                              pRelease->File[i] = 0;
+                      }
+              
+                      dhcpInfo.OptionsCounter = 0;
+              
+                      /* Add magic cookie bytes */
+                      dhcpInfo.pOpt = &(pRelease->Options);
+                      dhcp_OptMagicCookie();
+              
+                      /* Add DHCP_REQUEST option */
+                      optItem[0] = DHCP_RELEASE;
+                      dhcp_OptionsAppend(DHCP_OPTION_MSG_TYPE, 1, optItem);
+              
+                      /* Add DHCP_OPTION_END option */
+                      optItem[0] = 0;
+                      dhcp_OptionsAppend(DHCP_OPTION_END, 0, optItem);
+                      while ((dhcpInfo.OptionsCounter < DHCP_OPTIONS_LEN))
+                      {
+                              pRelease->Options[dhcpInfo.OptionsCounter ++] = 0;
+                      }
+              
+                      DHCP_TimeSet(3);
+                      DHCP_TimeStart();
+              }
+              #endif
+ 508          
+ 509          /*
+ 510           *--------------------------------------------------------------------------------
+ 511           * void DHCP_Decline(void)
+ 512           * Purpose :
+ 513           * Params  :
+ 514           * Returns :
+ 515           * Note    :
+ 516           *--------------------------------------------------------------------------------
+ 517           */
+ 518          #if 0
+              void DHCP_Decline(void)
+              {
+                      DHCP_HEADER             *pDecline;
+                      U8_T                    optItem[3] = {0, 0, 0};
+                      U16_T                   i;
+              
+                      pDecline = &dhcpBuffer;
+              
+                      pDecline->Op = DHCP_C_TO_S;
+                      pDecline->Htype = DHCP_HTYPE_ETHERNET;
+                      pDecline->Hlen = DHCP_HLEN_ETHERNET;
+                      pDecline->Hops = 0;
+                      pDecline->Xid = dhcpXid;
+                      pDecline->Seconds = 0;
+                      pDecline->Flags = 0;
+                      pDecline->CiAddr = 0;
+                      pDecline->YiAddr = 0;
+                      pDecline->SiAddr = 0;
+                      pDecline->GiAddr = 0;
+                      for (i=0 ; i<MAC_ADDRESS_LEN ; i++)
+                      {
+                              if (i < MAC_ADDRESS_LEN)
+                                      pDecline->ChAddr[i] = dhcpMacAddr[i];
+                              else
+                                      pDecline->ChAddr[i] = 0;
+                      }
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 10  
+
+                      for (i=0 ; i<DHCP_SNAME_LEN ; i++)
+                      {
+                              pDecline->Sname[i] = 0;
+                      }
+                      for (i=0 ; i<DHCP_FILE_LEN ; i++)
+                      {
+                              pDecline->File[i] = 0;
+                      }
+              
+                      dhcpInfo.OptionsCounter = 0;
+              
+                      /* Add magic cookie bytes */
+                      dhcpInfo.pOpt = &(pDecline->Options);
+                      dhcp_OptMagicCookie();
+              
+                      /* Add DHCP_REQUEST option */
+                      optItem[0] = DHCP_DECLINE;
+                      dhcp_OptionsAppend(DHCP_OPTION_MSG_TYPE, 1, optItem);
+              
+                      /* Add DHCP_OPTION_END option */
+                      optItem[0] = 0;
+                      dhcp_OptionsAppend(DHCP_OPTION_END, 0, optItem);
+                      while ((dhcpInfo.OptionsCounter < DHCP_OPTIONS_LEN))
+                      {
+                              pDecline->Options[dhcpInfo.OptionsCounter ++] = 0;
+                      }
+              
+                      DHCP_TimeSet(3);
+                      DHCP_TimeStart();
+              }
+              
+              #endif
+ 577          
+ 578          /*
+ 579           *--------------------------------------------------------------------------------
+ 580           * void dhcp_ReceiveMessage(void)
+ 581           * Purpose :
+ 582           * Params  :
+ 583           * Returns :
+ 584           * Note    :
+ 585           *--------------------------------------------------------------------------------
+ 586           */
+ 587          U8_T dhcp_ReceiveMessage(U16_T length)
+ 588          {
+ 589   1              DHCP_HEADER             *pDhcpMsg;
+ 590   1              U8_T                    *optMsg, dhcpMsgType = 0;
+ 591   1              U8_T                    i, rcvChAddr[6], chkMac = 1;
+ 592   1      
+ 593   1              pDhcpMsg = (DHCP_HEADER *)dhcpInfo.dhcpPktPtr;
+ 594   1      
+ 595   1          /* calculate the option length */
+ 596   1          length = length + DHCP_OPTIONS_LEN - sizeof(DHCP_HEADER);
+ 597   1      
+ 598   1              dhcpInfo.pOpt = &(pDhcpMsg->Options[0]);
+ 599   1              dhcpInfo.OptionsCounter = 0;
+ 600   1              for (i=0 ; i<MAC_ADDRESS_LEN ; i++)
+ 601   1                      rcvChAddr[i] = pDhcpMsg->ChAddr[i];
+ 602   1      
+ 603   1              if (pDhcpMsg->Op == DHCP_S_TO_C)
+ 604   1              {
+ 605   2                      /* check the received MAC address within ChAddr, except 00-00-00-00-00-00 & FF-FF-FF-FF-FF-FF */
+ 606   2                      if ((rcvChAddr[0]==0 && rcvChAddr[1]==0 && rcvChAddr[2]==0 && rcvChAddr[3]==0 && rcvChAddr[4]==0 && rcvC
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 11  
+
+             -hAddr[5]==0)
+ 607   2                      || (rcvChAddr[0]==0xFF && rcvChAddr[1]==0xFF && rcvChAddr[2]==0xFF && rcvChAddr[3]==0xFF && rcvChAddr[4]
+             -==0xFF && rcvChAddr[5]==0xFF))
+ 608   2                      {
+ 609   3                              chkMac = 0;
+ 610   3                      }
+ 611   2      
+ 612   2                      if (pDhcpMsg->Xid == dhcpXid)
+ 613   2                      {
+ 614   3                              if (chkMac)
+ 615   3                              {
+ 616   4                                      for (i=0 ; i<MAC_ADDRESS_LEN ; i++)
+ 617   4                                      {
+ 618   5                                              if (rcvChAddr[i] != dhcpMacAddr[i])
+ 619   5                                                      return DHCPC_MESSAGE_NOT_FOR_ME;
+ 620   5                                      }
+ 621   4                              }
+ 622   3                              if ((*(dhcpInfo.pOpt + 0) == 0x63) && (*(dhcpInfo.pOpt + 1) == 0x82) &&
+ 623   3                              (*(dhcpInfo.pOpt + 2) == 0x53) && (*(dhcpInfo.pOpt + 3) == 0x63))
+ 624   3                              {
+ 625   4                                      dhcpInfo.OptionsCounter += 4;
+ 626   4                                      dhcpInfo.pOpt += dhcpInfo.OptionsCounter;
+ 627   4                      length-=4;
+ 628   4      
+ 629   4                                      i = 0;
+ 630   4                      optMsg = dhcp_GetOption(dhcpInfo.pOpt, DHCP_OPTION_MSG_TYPE, &i, length);
+ 631   4                      if (optMsg && i == 1)
+ 632   4                          dhcpMsgType = *optMsg;
+ 633   4      
+ 634   4                      /* End of options */
+ 635   4                      optMsg = dhcpInfo.pOpt + length;
+ 636   4                                      while(*dhcpInfo.pOpt != DHCP_OPTION_END && dhcpInfo.pOpt <= optMsg)
+ 637   4                                      {
+ 638   5                                              if (*dhcpInfo.pOpt == DHCP_OPTION_MSG_TYPE)
+ 639   5                                              {
+ 640   6                                                      dhcpInfo.pOpt += 3;
+ 641   6                                                      if (dhcpMsgType == DHCP_ACK)
+ 642   6                                                      {
+ 643   7                                                              if (dhcpInfo.State == DHCP_REQUEST_STATE)
+ 644   7                                                              {
+ 645   8                                                                      dhcpInfo.IpAddr = (pDhcpMsg->YiAddr);
+ 646   8                                                                      /* Set local IP address */
+ 647   8                                                                      /* set uip host ip address */
+ 648   8                                                                      TCPIP_SetIPAddr(dhcpInfo.IpAddr);
+ 649   8      
+ 650   8                                                                      /* set stoe host ip address */
+ 651   8                                                                      STOE_SetIPAddr((dhcpInfo.IpAddr));
+ 652   8                                                              }
+ 653   7                                                              else if (dhcpInfo.State == DHCP_RENEW_STATE)
+ 654   7                                                              {
+ 655   8                                                                      if (pDhcpMsg->YiAddr != STOE_GetIPAddr())
+ 656   8                                                                      {
+ 657   9                                                                              return DHCPC_MESSAGE_FAIL;
+ 658   9                                                                      }
+ 659   8                                                              }
+ 660   7                                                              else
+ 661   7                                                              {
+ 662   8                                                                      return DHCPC_MESSAGE_NOT_FOR_ME;
+ 663   8                                                              }
+ 664   7                                                      }
+ 665   6                                                      else if (dhcpMsgType == DHCP_OFFER)
+ 666   6                                                      {
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 12  
+
+ 667   7                                                              if (dhcpInfo.State == DHCP_DISCOVER_STATE)
+ 668   7                                                              {
+ 669   8                                                                      if (pDhcpMsg->YiAddr)
+ 670   8                                                                              *(U32_T*)dhcpInfo.ClientOfferedIp = pDhcpMsg->YiAddr;
+ 671   8                                                              }
+ 672   7                                                              else
+ 673   7                                                              {
+ 674   8                                                                      return DHCPC_MESSAGE_NOT_FOR_ME;
+ 675   8                                                              }
+ 676   7                                                      }
+ 677   6                                                      else if (dhcpMsgType == DHCP_NAK)
+ 678   6                                                      {
+ 679   7                                                              return DHCPC_MESSAGE_FAIL;
+ 680   7                                                      }
+ 681   6                                              }
+ 682   5                                              else
+ 683   5                                              {       
+ 684   6                                                      if (dhcpMsgType == DHCP_ACK)
+ 685   6                              {
+ 686   7                                                              if (dhcpInfo.State == DHCP_RENEW_STATE)
+ 687   7                                                              {
+ 688   8                                                                      if (pDhcpMsg->YiAddr != STOE_GetIPAddr())
+ 689   8                                                                      {
+ 690   9                                          /* The IP is not device requested, keep the lease time only. */
+ 691   9                                          dhcp_OptionCheck(DHCP_NAK);
+ 692   9                                                          dhcp_LeaseTime = dhcpInfo.LeaseTime/2;
+ 693   9                                                          dhcp_LeaseTimerT1 = dhcp_LeaseTime;
+ 694   9                                          return DHCPC_MESSAGE_SUCCESS;
+ 695   9                                                                      }
+ 696   8                                                              }
+ 697   7                                                              dhcp_OptionCheck(DHCP_ACK);
+ 698   7                              }
+ 699   6                                                      else
+ 700   6                                                              dhcp_OptionCheck(DHCP_OFFER);
+ 701   6                                              }
+ 702   5                                      }
+ 703   4                                      return DHCPC_MESSAGE_SUCCESS;
+ 704   4                              }
+ 705   3                              else
+ 706   3                                      return DHCPC_MESSAGE_FAIL;
+ 707   3                      }
+ 708   2                      else
+ 709   2                              return DHCPC_MESSAGE_NOT_FOR_ME;
+ 710   2              }
+ 711   1      
+ 712   1              return DHCPC_MESSAGE_NOT_FOR_ME;
+ 713   1      }
+ 714          
+ 715          /*
+ 716           *--------------------------------------------------------------------------------
+ 717           * void dhcp_OptionCheck()
+ 718           * Purpose :
+ 719           * Params  :
+ 720           * Returns :
+ 721           * Note    :
+ 722           *--------------------------------------------------------------------------------
+ 723           */
+ 724          void dhcp_OptionCheck(U8_T msgType)
+ 725          {
+ 726   1              U8_T    len;
+ 727   1      
+ 728   1              switch(*(dhcpInfo.pOpt))
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 13  
+
+ 729   1              {
+ 730   2                      case DHCP_OPTION_SUBNET_MASK:
+ 731   2                              memcpy(&(dhcpInfo.NetMask), (dhcpInfo.pOpt + 2), 4);
+ 732   2                              len = *(dhcpInfo.pOpt + 1) + 2;
+ 733   2                              dhcpInfo.pOpt += len;
+ 734   2      
+ 735   2                              if (msgType == DHCP_ACK)
+ 736   2                              {
+ 737   3                                      /* Set SubNet Mask address */
+ 738   3                                      /* set uip subnet mask address */
+ 739   3                                      TCPIP_SetSubnetMask(dhcpInfo.NetMask);
+ 740   3      
+ 741   3                                      /* set stoe subnet mask address */
+ 742   3                                      STOE_SetSubnetMask((dhcpInfo.NetMask));
+ 743   3                              }
+ 744   2                              break;
+ 745   2                      case DHCP_OPTION_ROUTER:
+ 746   2                              memcpy(&(dhcpInfo.DefaultRouter), (dhcpInfo.pOpt + 2), 4);
+ 747   2                              len = *(dhcpInfo.pOpt + 1) + 2;
+ 748   2                              dhcpInfo.pOpt += len;
+ 749   2      
+ 750   2                              if (msgType == DHCP_ACK)
+ 751   2                              {
+ 752   3                                      /* Set Gateway address */
+ 753   3                                      /* set uip gateway address */
+ 754   3                                      TCPIP_SetGateway(dhcpInfo.DefaultRouter);
+ 755   3      
+ 756   3                                      /* set stoe gateway address */
+ 757   3                                      STOE_SetGateway((dhcpInfo.DefaultRouter));
+ 758   3                              }
+ 759   2                              break;
+ 760   2                      case DHCP_OPTION_DNS_SERVER:
+ 761   2                              memcpy(&(dhcpInfo.DnsAddr), (dhcpInfo.pOpt + 2), 4);
+ 762   2                              len = *(dhcpInfo.pOpt + 1) + 2;
+ 763   2                              dhcpInfo.pOpt += len;
+ 764   2                              break;
+ 765   2                      case DHCP_OPTION_SERVER_ID:
+ 766   2                              memcpy(&(dhcpInfo.ServerId[0]), (dhcpInfo.pOpt + 2), 4);
+ 767   2                              len = *(dhcpInfo.pOpt + 1) + 2;
+ 768   2                              dhcpInfo.pOpt += len;
+ 769   2                              break;
+ 770   2                      case DHCP_OPTION_LEASE_TIME:
+ 771   2                              memcpy(&(dhcpInfo.LeaseTime), (dhcpInfo.pOpt + 2), 4);
+ 772   2                              len = *(dhcpInfo.pOpt + 1) + 2;
+ 773   2                              dhcpInfo.pOpt += len;
+ 774   2                              if (msgType == DHCP_ACK)
+ 775   2                              {
+ 776   3                                      dhcp_LeaseTime = dhcpInfo.LeaseTime/2;
+ 777   3                                      dhcp_LeaseTimerT1 = dhcp_LeaseTime;
+ 778   3                              }
+ 779   2                  break;
+ 780   2                      default :
+ 781   2                              len = *(dhcpInfo.pOpt + 1);
+ 782   2                              dhcpInfo.pOpt += (len + 2);
+ 783   2                              break;
+ 784   2              }
+ 785   1      }
+ 786          
+ 787          /*
+ 788           *--------------------------------------------------------------------------------
+ 789           * void dhcp_GetOption()
+ 790           * Purpose :
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 14  
+
+ 791           * Params  :
+ 792           * Returns :
+ 793           * Note    :
+ 794           *--------------------------------------------------------------------------------
+ 795           */
+ 796          U8_T *dhcp_GetOption(U8_T *optMsg, U8_T msgCode, U8_T *vLen, U16_T maxLen)
+ 797          {
+ 798   1          U8_T len, *optMsgEnd;
+ 799   1          
+ 800   1          optMsgEnd = optMsg + maxLen;
+ 801   1          while(*optMsg != DHCP_OPTION_END && optMsg <= optMsgEnd) /* first to parse the msg type */
+ 802   1          {
+ 803   2              if (*optMsg == msgCode)
+ 804   2              {
+ 805   3                  *vLen = *(optMsg + 1);
+ 806   3                  optMsg += 2;
+ 807   3                  return optMsg;
+ 808   3              }
+ 809   2              else
+ 810   2              {
+ 811   3                  len = *(optMsg + 1);
+ 812   3                  optMsg += (len + 2);
+ 813   3              }
+ 814   2          }
+ 815   1      
+ 816   1          return 0;
+ 817   1      } /* End of dhcp_GetOption() */
+ 818          
+ 819          /*
+ 820           *--------------------------------------------------------------------------------
+ 821           * void dhcp_OptMagicCookie(void)
+ 822           * Purpose :
+ 823           * Params  :
+ 824           * Returns :
+ 825           * Note    :
+ 826           *--------------------------------------------------------------------------------
+ 827           */
+ 828          void dhcp_OptMagicCookie(void)
+ 829          {
+ 830   1              *(dhcpInfo.pOpt + 0) = 0x63;
+ 831   1              *(dhcpInfo.pOpt + 1) = 0x82;
+ 832   1              *(dhcpInfo.pOpt + 2) = 0x53;
+ 833   1              *(dhcpInfo.pOpt + 3) = 0x63;
+ 834   1              dhcpInfo.OptionsCounter += 4;
+ 835   1              dhcpInfo.pOpt += dhcpInfo.OptionsCounter;
+ 836   1      }
+ 837          
+ 838          /*
+ 839           *--------------------------------------------------------------------------------
+ 840           * void dhcp_OptionsAppend(void)
+ 841           * Purpose :
+ 842           * Params  :
+ 843           * Returns :
+ 844           * Note    :
+ 845           *--------------------------------------------------------------------------------
+ 846           */
+ 847          void dhcp_OptionsAppend(U8_T optCode, U8_T optLen, U8_T *optContent)
+ 848          {
+ 849   1              U16_T   i;
+ 850   1              U16_T   count = 0;
+ 851   1      
+ 852   1              *(dhcpInfo.pOpt + 0) = optCode;
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 15  
+
+ 853   1              count ++;
+ 854   1      
+ 855   1              *(dhcpInfo.pOpt + 1) = optLen;
+ 856   1              count ++;
+ 857   1      
+ 858   1              for (i=0 ; i<optLen ; i++)
+ 859   1              {
+ 860   2                      *(dhcpInfo.pOpt + 2 + i) = *(optContent + i);
+ 861   2                      count ++;
+ 862   2              }
+ 863   1              
+ 864   1      
+ 865   1              if (optCode != DHCP_OPTION_END)
+ 866   1              {
+ 867   2                      dhcpInfo.pOpt = dhcpInfo.pOpt + count;
+ 868   2                      dhcpInfo.OptionsCounter = dhcpInfo.OptionsCounter + count;
+ 869   2              }
+ 870   1              else
+ 871   1              {
+ 872   2                      *(dhcpInfo.pOpt) = optCode;
+ 873   2                      dhcpInfo.pOpt = dhcpInfo.pOpt + count;
+ 874   2                      dhcpInfo.OptionsCounter = dhcpInfo.OptionsCounter + count;
+ 875   2              }
+ 876   1      
+ 877   1      } /* End of dhcp_OptionsAppend() */
+ 878          
+ 879          /*
+ 880           *--------------------------------------------------------------------------------
+ 881           * void DHCP_RejectOffer(void)
+ 882           * Purpose :
+ 883           * Params  :
+ 884           * Returns :
+ 885           * Note    :
+ 886           *--------------------------------------------------------------------------------
+ 887           */
+ 888          void DHCP_RejectOffer(void)
+ 889          {
+ 890   1              DHCP_HEADER             *pDecline;
+ 891   1              U8_T                    optItem[3] = {0, 0, 0};
+ 892   1              U16_T                   i;
+ 893   1      
+ 894   1              dhcpInfo.SocketId = TCPIP_UdpNew(dhcpInfo.AppId, dhcpConnID, *((U32_T *)&dhcpInfo.ServerId[0]), (U16_T)DH
+             -CP_CLIENT_PORT,
+ 895   1                                              (U16_T)DHCP_SERVER_PORT);
+ 896   1              if (dhcpInfo.SocketId == TCPIP_NO_NEW_CONN)
+ 897   1              {
+ 898   2                      return;
+ 899   2              }
+ 900   1      
+ 901   1              pDecline = &dhcpBuffer;
+ 902   1      
+ 903   1              pDecline->Op = DHCP_C_TO_S;
+ 904   1              pDecline->Htype = DHCP_HTYPE_ETHERNET;
+ 905   1              pDecline->Hlen = DHCP_HLEN_ETHERNET;
+ 906   1              pDecline->Hops = 0;
+ 907   1              pDecline->Xid = dhcpXid;
+ 908   1              pDecline->Seconds = 0;
+ 909   1              pDecline->Flags = 0;
+ 910   1              pDecline->CiAddr = 0;
+ 911   1              pDecline->YiAddr = 0;
+ 912   1              pDecline->SiAddr = 0;
+ 913   1              pDecline->GiAddr = 0;
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 16  
+
+ 914   1              for (i=0 ; i<MAC_ADDRESS_LEN ; i++)
+ 915   1              {
+ 916   2                      if (i < MAC_ADDRESS_LEN)
+ 917   2                              pDecline->ChAddr[i] = dhcpMacAddr[i];
+ 918   2                      else
+ 919   2                              pDecline->ChAddr[i] = 0;
+ 920   2              }
+ 921   1              for (i=0 ; i<DHCP_SNAME_LEN ; i++)
+ 922   1              {
+ 923   2                      pDecline->Sname[i] = 0;
+ 924   2              }
+ 925   1              for (i=0 ; i<DHCP_FILE_LEN ; i++)
+ 926   1              {
+ 927   2                      pDecline->File[i] = 0;
+ 928   2              }
+ 929   1      
+ 930   1              dhcpInfo.OptionsCounter = 0;
+ 931   1      
+ 932   1              /* Add magic cookie bytes */
+ 933   1              dhcpInfo.pOpt = &(pDecline->Options);
+ 934   1              dhcp_OptMagicCookie();
+ 935   1      
+ 936   1              /* Add DHCP_REQUEST option */
+ 937   1              optItem[0] = DHCP_DECLINE;
+ 938   1              dhcp_OptionsAppend(DHCP_OPTION_MSG_TYPE, 1, optItem);
+ 939   1      
+ 940   1              /* Add DHCP_OPTION_END option */
+ 941   1              optItem[0] = 0;
+ 942   1              dhcp_OptionsAppend(DHCP_OPTION_END, 0, optItem);
+ 943   1              while ((dhcpInfo.OptionsCounter < DHCP_OPTIONS_LEN))
+ 944   1              {
+ 945   2                      pDecline->Options[dhcpInfo.OptionsCounter ++] = 0;
+ 946   2              }
+ 947   1      
+ 948   1              TCPIP_UdpSend((dhcpInfo.SocketId), NULL, 0, (U8_T *)pDecline, (U16_T)(DHCP_FIXED_LEN + dhcpInfo.OptionsCo
+             -unter));
+ 949   1      
+ 950   1              TCPIP_UdpClose(dhcpInfo.SocketId);
+ 951   1      }
+ 952          
+ 953          /*
+ 954           *--------------------------------------------------------------------------------
+ 955           * Function Name: DHCPC_LeaseTimeCheck
+ 956           * Purpose : This function is called every second to check the lease time
+ 957           * Params  :
+ 958           * Returns :
+ 959           * Note    :
+ 960           *--------------------------------------------------------------------------------
+ 961           */
+ 962          void DHCPC_LeaseTimeCheck(void)
+ 963          {
+ 964   1              if (!dhcp_LeaseTime) /* ip address not from dhcp server */
+ 965   1                      return;
+ 966   1      
+ 967   1              if (dhcpInfo.State == DHCP_RENEW_STATE)
+ 968   1              {
+ 969   2                      dhcp_curTime = (U16_T)SWTIMER_Tick();
+ 970   2      
+ 971   2                      if ((dhcp_curTime - dhcp_Time) >= DHCP_REQUEST_TIMEOUT) /* had timeout */
+ 972   2                      {
+ 973   3                              if (++dhcp_Retry >= DHCP_MAX_RETRY)
+ 974   3                              {
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 17  
+
+ 975   4                                      TCPIP_UdpClose(dhcpInfo.SocketId);
+ 976   4                                      dhcpInfo.State = DHCP_IDLE_STATE;
+ 977   4                              }
+ 978   3                              else
+ 979   3                              {
+ 980   4                                      dhcp_Request(0);
+ 981   4                                      dhcpInfo.State = DHCP_RENEW_STATE;
+ 982   4                                      dhcp_Time = (U16_T)SWTIMER_Tick();
+ 983   4                              }
+ 984   3                      }
+ 985   2      
+ 986   2                      if (dhcp_LeaseTimerT1 > 1)
+ 987   2                              dhcp_LeaseTimerT1--;
+ 988   2              }
+ 989   1              else if (--dhcp_LeaseTimerT1 == 0) /* lease time expired */
+ 990   1              {
+ 991   2                      dhcp_LeaseTime /= 2;
+ 992   2                      dhcp_LeaseTimerT1 = dhcp_LeaseTime;
+ 993   2                      if (dhcp_LeaseTimerT1 < 10) /* < 10 seconds */
+ 994   2                      {
+ 995   3                  dhcp_LeaseTime = 0;
+ 996   3                      }
+ 997   2                      else
+ 998   2                      {
+ 999   3                              dhcpInfo.SocketId = TCPIP_UdpNew(dhcpInfo.AppId, dhcpConnID, *((U32_T *)&dhcpInfo.ServerId[0]),
+1000   3                                                                   (U16_T)DHCP_CLIENT_PORT, (U16_T)DHCP_SERVER_PORT);
+1001   3                              if (dhcpInfo.SocketId == TCPIP_NO_NEW_CONN)
+1002   3                              {
+1003   4                                      return;
+1004   4                              }
+1005   3      
+1006   3                              dhcp_Retry = 0;
+1007   3                              dhcp_Request(0);
+1008   3                              dhcpInfo.State = DHCP_RENEW_STATE;
+1009   3                              dhcp_Time = (U16_T)SWTIMER_Tick();
+1010   3                      }
+1011   2              }
+1012   1      
+1013   1      } /* End of DHCPC_LeaseTimeCheck() */
+1014          
+1015          /*
+1016           *--------------------------------------------------------------------------------
+1017           * Function Name: DHCPC_LeaseTimeReset
+1018           * Purpose : This function is called to reset parameter dhcp_LeaseTime to zero, so
+1019           *                       driver could not enable dhcp client renew function.
+1020           * Params  :
+1021           * Returns :
+1022           * Note    :
+1023           *--------------------------------------------------------------------------------
+1024           */
+1025          void DHCPC_LeaseTimeReset(void)
+1026          {
+1027   1              dhcp_LeaseTime = 0;
+1028   1      
+1029   1      } /* End of DHCPC_LeaseTimeReset() */
+1030          
+1031          
+1032          /* End of dhcpc.c */
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   5826    ----
+C51 COMPILER V9.05   DHCPC                                                                 03/02/2012 01:21:43 PAGE 18  
+
+   CONSTANT SIZE    =     17    ----
+   XDATA SIZE       =    617      73
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

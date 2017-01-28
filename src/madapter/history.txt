@@ -1,0 +1,17 @@
+//======================================================================
+// AX22000 Firmware Revision History
+// Module Name: MCPU ADAPTER Module (madapter)
+//
+// This document describes the major changes, additions and bug fixes made 
+// to the AX22000 Firmware between released versions. 
+//======================================================================
+
+Version 1.1.0  (2011-05-20)
+1. Fixed a software issue that driver always calls DMA_Grant() function to
+   copy TCP/UDP packet payload to STOE TX buffer ring.
+2. Added function to filter the received frames that source mac address is
+   myself.
+
+Version 1.0.0  (2011-04-19)
+1. Initial release
+
